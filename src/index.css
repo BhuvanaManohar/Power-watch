@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #f8f9ff;
+  --color-surface-dim: #ccdbf3;
+  --color-surface-bright: #f8f9ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container: #e6eeff;
+  --color-surface-container-high: #dce9ff;
+  --color-surface-container-highest: #d5e3fc;
+  --color-on-surface: #0d1c2e;
+  --color-on-surface-variant: #424654;
+  --color-inverse-surface: #233144;
+  --color-inverse-on-surface: #eaf1ff;
+  --color-outline: #737785;
+  --color-outline-variant: #c3c6d6;
+  --color-surface-tint: #0957cc;
+  --color-primary: #0048af;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1e60d5;
+  --color-on-primary-container: #dee5ff;
+  --color-inverse-primary: #b1c5ff;
+  --color-secondary: #006c4a;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #82f5c1;
+  --color-on-secondary-container: #00714e;
+  --color-tertiary: #8d3000;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #b54000;
+  --color-on-tertiary-container: #ffe0d5;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #dae2ff;
+  --color-primary-fixed-dim: #b1c5ff;
+  --color-on-primary-fixed: #001946;
+  --color-on-primary-fixed-variant: #00419e;
+  --color-secondary-fixed: #85f8c4;
+  --color-secondary-fixed-dim: #68dba9;
+  --color-on-secondary-fixed: #002114;
+  --color-on-secondary-fixed-variant: #005137;
+  --color-tertiary-fixed: #ffdbce;
+  --color-tertiary-fixed-dim: #ffb599;
+  --color-on-tertiary-fixed: #370e00;
+  --color-on-tertiary-fixed-variant: #7f2b00;
+  --color-background: #f8f9ff;
+  --color-on-background: #0d1c2e;
+  --color-surface-variant: #d5e3fc;
+
+  --spacing-margin: 1.5rem;
+  --spacing-margin-desktop: 3rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-gutter: 1.5rem;
+  --spacing-gutter-sm: 1rem;
+  --spacing-gutter-lg: 2rem;
+  --spacing-space-xxs: 0.125rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xl: 2rem;
+  --spacing-space-2xl: 3rem;
+
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+}
+
+@utility tnum {
+  font-feature-settings: "tnum";
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #f8f9ff;
+  color: #0d1c2e;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Material symbols baseline style */
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
