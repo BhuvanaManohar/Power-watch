@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export function Header() {
+export function Header({ onNavigateSignIn }) {
   const [activeSection, setActiveSection] = useState('home');
 
   useEffect(() => {
@@ -85,13 +85,13 @@ export function Header() {
         {/* Right Header Actions */}
         <div className="flex items-center gap-space-md shrink-0">
           {/* Sign In Link */}
-          <a
-            href="#sign-in"
-            onClick={(e) => { e.preventDefault(); }}
-            className="hidden sm:inline-flex text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+          <button
+            type="button"
+            onClick={onNavigateSignIn}
+            className="hidden sm:inline-flex text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors cursor-pointer focus:outline-none"
           >
             Sign In
-          </a>
+          </button>
 
           {/* Report Outage Action Button */}
           <a

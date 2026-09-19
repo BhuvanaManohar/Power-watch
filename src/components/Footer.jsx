@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-export function Footer() {
+export function Footer({ onNavigateSignIn }) {
   return (
     <footer className="w-full bg-surface-container-low border-t border-outline-variant/30 py-space-xl px-margin md:px-margin-desktop">
       <div className="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
@@ -40,13 +40,13 @@ export function Footer() {
             <a href="#citizens-and-teams" className="hover:text-primary transition-colors">
               Citizens & Utility Teams
             </a>
-            <a
-              href="#sign-in"
-              onClick={(e) => { e.preventDefault(); }}
-              className="hover:text-primary transition-colors cursor-pointer"
+            <button
+              type="button"
+              onClick={onNavigateSignIn}
+              className="hover:text-primary transition-colors cursor-pointer text-xs font-semibold text-on-surface-variant focus:outline-none"
             >
               Sign In
-            </a>
+            </button>
           </nav>
         </div>
 
