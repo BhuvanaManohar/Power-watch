@@ -13,12 +13,14 @@ import { DepartmentDashboard } from './components/DepartmentDashboard';
 import { IncidentDetailScreen } from './components/IncidentDetailScreen';
 import { ReportOutageScreen } from './components/ReportOutageScreen';
 import { ReportGroupingScreen } from './components/ReportGroupingScreen';
+import { OutageHistoryScreen } from './components/OutageHistoryScreen';
 import { ToastContainer } from './components/ToastContainer';
 import { initialIncidentsData, initialCrewsData } from './data/mockIncidentsStore';
 import { initialNotificationsData } from './data/mockNotificationsStore';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('landing'); // 'landing' | 'signin' | 'signup' | 'citizen-demo' | 'department-demo' | 'incident-detail' | 'report-outage' | 'report-grouping'
+  const [currentScreen, setCurrentScreen] = useState('landing'); // 'landing' | 'signin' | 'signup' | 'citizen-demo' | 'department-demo' | 'incident-detail' | 'report-outage' | 'report-grouping' | 'outage-history'
+  const [previousScreen, setPreviousScreen] = useState('landing');
   const [selectedIncidentId, setSelectedIncidentId] = useState('west-district');
   const [incidentsData, setIncidentsData] = useState(initialIncidentsData);
   const [crewsData, setCrewsData] = useState(initialCrewsData);
@@ -98,6 +100,7 @@ export default function App() {
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
         onViewIncidentDetail={(id) => {
           setSelectedIncidentId(id);
+          setPreviousScreen('citizen-demo');
           setCurrentScreen('incident-detail');
         }}
         onNavigateHome={() => setCurrentScreen('signin')}
@@ -118,6 +121,7 @@ export default function App() {
         onNavigateReportGrouping={() => setCurrentScreen('report-grouping')}
         onViewIncidentDetail={(id) => {
           setSelectedIncidentId(id);
+          setPreviousScreen('department-demo');
           setCurrentScreen('incident-detail');
         }}
       />
@@ -127,7 +131,13 @@ export default function App() {
       <IncidentDetailScreen
         incidentId={selectedIncidentId}
         incidentsData={incidentsData}
-        onBack={handleNavigateLiveOutages}
+        onBack={() => {
+          if (previousScreen === 'outage-history') {
+            setCurrentScreen('outage-history');
+          } else {
+            handleNavigateLiveOutages();
+          }
+        }}
         onBackToCitizenPortal={() => setCurrentScreen('citizen-demo')}
         onBackToDepartmentPortal={() => setCurrentScreen('department-demo')}
       />
@@ -150,6 +160,22 @@ export default function App() {
         onBack={() => setCurrentScreen('department-demo')}
         onViewIncident={(id) => {
           setSelectedIncidentId(id);
+          setPreviousScreen('report-grouping');
+          setCurrentScreen('incident-detail');
+        }}
+      />
+    );
+  } else if (currentScreen === 'outage-history') {
+    content = (
+      <OutageHistoryScreen
+        incidentsData={incidentsData}
+        onNavigateHome={() => setCurrentScreen('landing')}
+        onNavigateLiveOutages={handleNavigateLiveOutages}
+        onNavigateSignIn={() => setCurrentScreen('signin')}
+        onNavigateReportOutage={() => setCurrentScreen('report-outage')}
+        onViewIncidentDetail={(id) => {
+          setSelectedIncidentId(id);
+          setPreviousScreen('outage-history');
           setCurrentScreen('incident-detail');
         }}
       />
@@ -160,12 +186,17 @@ export default function App() {
         <Header
           onNavigateSignIn={() => setCurrentScreen('signin')}
           onNavigateReportOutage={() => setCurrentScreen('report-outage')}
+          onNavigateOutageHistory={() => setCurrentScreen('outage-history')}
+          onNavigateHome={() => setCurrentScreen('landing')}
+          onNavigateLiveOutages={handleNavigateLiveOutages}
+          currentScreen={currentScreen}
         />
         <main className="w-full pt-20 bg-background flex-1">
           <Hero />
           <LiveOutages
             onSelectIncidentDetail={(id) => {
               setSelectedIncidentId(id);
+              setPreviousScreen('landing');
               setCurrentScreen('incident-detail');
             }}
           />
@@ -185,3 +216,4 @@ export default function App() {
     </>
   );
 }
+

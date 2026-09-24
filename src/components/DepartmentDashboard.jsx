@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DashboardHeader } from './DashboardHeader';
 import { IncidentManagementModal } from './IncidentManagementModal';
+import { computeOutageAnalytics } from '../data/mockIncidentsStore';
 
 export function DepartmentDashboard({
   incidentsData = {},
@@ -27,6 +28,8 @@ export function DepartmentDashboard({
       inc.category !== 'resolved'
   ).length;
 
+  const analytics = computeOutageAnalytics(incidentsData);
+
   const activeManagementIncident = selectedIncidentForManagement
     ? incidentsData[selectedIncidentForManagement.id] || selectedIncidentForManagement
     : null;
@@ -48,7 +51,7 @@ export function DepartmentDashboard({
           <div className="flex items-center gap-space-sm">
             <span className="material-symbols-outlined text-secondary text-[22px]">verified_user</span>
             <div>
-              <p className="text-sm font-bold text-on-surface">You are currently in Department Officer Operations Center</p>
+              <h1 className="text-sm font-bold text-on-surface">You are currently in Department Officer Operations Center</h1>
               <p className="text-xs text-on-surface-variant">Review incoming citizen notices, dispatch field crews, update ETRs, and publish restoration updates.</p>
             </div>
           </div>
@@ -98,6 +101,24 @@ export function DepartmentDashboard({
             <span className="text-2xl font-bold text-on-surface">{highPriorityCount}</span>
             <span className="text-xs text-error font-semibold">Priority dispatch</span>
           </div>
+        </div>
+
+        {/* HISTORICAL ANALYTICS OVERVIEW FOR DEPARTMENT OFFICERS */}
+        <div className="p-space-md rounded-xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex items-center justify-between flex-wrap gap-space-md">
+          <div className="flex items-center gap-space-md">
+            <div className="p- space.sm rounded-lg bg-primary-container text-on-primary-container">
+              <span className="material-symbols-outlined text-[24px]">analytics</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-on-surface">Historical System Performance Summary</h4>
+              <p className="text-xs text-on-surface-variant">
+                Total Logged: <strong className="text-on-surface">{analytics.totalIncidents}</strong> | Resolved: <strong className="text-secondary">{analytics.resolvedCount}</strong> | Avg Restoration: <strong className="text-tertiary">{analytics.avgRestorationHoursStr}</strong> | High/Critical: <strong className="text-error">{analytics.severityCounts.Critical + analytics.severityCounts.High}</strong>
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant">
+            DISCOM Historical Metrics Active
+          </span>
         </div>
 
         {/* 2-COLUMN MAIN OPERATIONS LAYOUT */}
