@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export function Header({ onNavigateSignIn }) {
+export function Header({ onNavigateSignIn, onNavigateReportOutage }) {
   const [activeSection, setActiveSection] = useState('home');
 
   useEffect(() => {
@@ -94,12 +94,20 @@ export function Header({ onNavigateSignIn }) {
           </button>
 
           {/* Report Outage Action Button */}
-          <a
-            href="#live-outages"
-            className="inline-flex items-center justify-center px-space-md py-space-sm rounded-lg bg-primary text-on-primary font-semibold text-sm hover:bg-primary-container transition-colors shadow-sm"
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigateReportOutage) {
+                onNavigateReportOutage();
+              } else {
+                const el = document.getElementById('live-outages');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
+            className="inline-flex items-center justify-center px-space-md py-space-sm rounded-lg bg-primary text-on-primary font-semibold text-sm hover:bg-primary-container transition-colors shadow-sm cursor-pointer"
           >
             Report Outage Now
-          </a>
+          </button>
         </div>
       </div>
     </header>
