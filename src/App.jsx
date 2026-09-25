@@ -138,6 +138,7 @@ export default function App() {
             handleNavigateLiveOutages();
           }
         }}
+        onBackToOutageHistory={() => setCurrentScreen('outage-history')}
         onBackToCitizenPortal={() => setCurrentScreen('citizen-demo')}
         onBackToDepartmentPortal={() => setCurrentScreen('department-demo')}
       />

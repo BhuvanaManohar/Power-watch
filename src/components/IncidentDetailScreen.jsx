@@ -133,6 +133,7 @@ export function IncidentDetailScreen({
   onBack,
   onBackToDepartmentPortal,
   onBackToCitizenPortal,
+  onBackToOutageHistory,
 }) {
   const dataset = incidentsData || mockIncidentDetailsData;
   const targetKey = Object.keys(dataset).find(
@@ -145,7 +146,7 @@ export function IncidentDetailScreen({
       {/* Top Header Navigation */}
       <header className="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest border-b border-outline-variant/30 py-space-md px-margin md:px-margin-desktop shadow-sm">
         <div className="max-w-[1440px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-space-sm sm:gap-space-md">
+          <div className="flex items-center gap-space-sm sm:gap-space-md flex-wrap">
             <button
               type="button"
               onClick={onBack}
@@ -154,6 +155,17 @@ export function IncidentDetailScreen({
               <span className="material-symbols-outlined text-[18px]">arrow_back</span>
               <span>Back to Live Outages</span>
             </button>
+
+            {onBackToOutageHistory && (
+              <button
+                type="button"
+                onClick={onBackToOutageHistory}
+                className="flex items-center gap-space-xs text-xs font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer border-l border-outline-variant/40 pl-space-sm sm:pl-space-md"
+              >
+                <span className="material-symbols-outlined text-[18px]">history</span>
+                <span>Back to Outage History</span>
+              </button>
+            )}
 
             {onBackToCitizenPortal && (
               <button
