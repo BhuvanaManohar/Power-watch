@@ -29,7 +29,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> UserAuthCon
             raise AuthenticationException("Invalid or expired access token.")
         
         user_id = UUID(user_response.user.id)
-        return UserAuthContext(user_id=user_id)
+        return UserAuthContext(user_id=user_id, access_token=token)
     except AuthenticationException:
         raise
     except Exception:
