@@ -3,6 +3,15 @@ from uuid import UUID
 from datetime import datetime
 from pydantic import BaseModel
 
+class NotificationCreateRequest(BaseModel):
+    """Pydantic schema for creating a new notification (Officer/Admin only via RLS)."""
+    user_id: UUID
+    title: str
+    message: str
+    category: str
+    incident_id: Optional[UUID] = None
+    report_id: Optional[UUID] = None
+
 class NotificationResponse(BaseModel):
     """Pydantic schema for Notification response object matching public.notifications."""
     id: UUID
