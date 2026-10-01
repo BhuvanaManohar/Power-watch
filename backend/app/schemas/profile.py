@@ -17,6 +17,21 @@ class ProfileCreateRequest(BaseModel):
             raise ValueError("preferred_language must be either 'en' or 'te'.")
         return v
 
+class ProfileUpdateRequest(BaseModel):
+    """Pydantic schema for editing editable profile attributes."""
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    preferred_language: Optional[str] = None
+
+    @field_validator("preferred_language")
+    @classmethod
+    def validate_language(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            allowed = {"en", "te"}
+            if v not in allowed:
+                raise ValueError("preferred_language must be either 'en' or 'te'.")
+        return v
+
 class ProfileResponse(BaseModel):
     """Pydantic schema for Profile response object matching public.profiles."""
     id: UUID
