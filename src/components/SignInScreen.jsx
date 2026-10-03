@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 export function SignInScreen({
   onNavigateHome,
@@ -9,6 +10,7 @@ export function SignInScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accountType, setAccountType] = useState('citizen'); // 'citizen' | 'utility'
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Officer Verification State
   const [employeeId, setEmployeeId] = useState('EMP-84920');
@@ -35,13 +37,24 @@ export function SignInScreen({
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // UI mock only - if citizen submit, go to citizen demo; if utility, go to department demo
-    if (accountType === 'citizen' && onNavigateCitizenDemo) {
-      onNavigateCitizenDemo();
-    } else if (accountType === 'utility' && onNavigateDepartmentDemo) {
-      onNavigateDepartmentDemo();
+    setErrorMessage('');
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+
+      console.log('[PowerWatch] User signed in successfully:', data.user?.id);
+    } catch (err) {
+      setErrorMessage(err.message || 'An unexpected error occurred during sign in.');
     }
   };
 
@@ -99,6 +112,7 @@ export function SignInScreen({
               onClick={() => {
                 setAccountType('citizen');
                 setVerificationResult(null);
+                setErrorMessage('');
               }}
               className={`py-space-xs px-space-sm rounded-lg text-xs font-semibold transition-all ${
                 accountType === 'citizen'
@@ -113,6 +127,7 @@ export function SignInScreen({
               onClick={() => {
                 setAccountType('utility');
                 setVerificationResult(null);
+                setErrorMessage('');
               }}
               className={`py-space-xs px-space-sm rounded-lg text-xs font-semibold transition-all ${
                 accountType === 'utility'
@@ -123,6 +138,14 @@ export function SignInScreen({
               Utility / Department
             </button>
           </div>
+
+          {/* Inline Error Message */}
+          {errorMessage && (
+            <div className="p-space-sm rounded-lg bg-error-container/30 border border-error-container text-on-error-container text-xs flex items-center gap-space-xs font-medium">
+              <span className="material-symbols-outlined text-[16px] text-error shrink-0">error</span>
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-space-md">

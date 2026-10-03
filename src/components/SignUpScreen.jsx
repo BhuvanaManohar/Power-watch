@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 export function SignUpScreen({ onNavigateHome, onNavigateSignIn }) {
   const [fullName, setFullName] = useState('');
@@ -9,11 +10,61 @@ export function SignUpScreen({ onNavigateHome, onNavigateSignIn }) {
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isPendingConfirmation, setIsPendingConfirmation] = useState(false);
 
-  const handleSubmit = (e) => {
+  const [isResending, setIsResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState(null); // { type: 'success' | 'error', message: string }
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim() || isResending) return;
+
+    setIsResending(true);
+    setResendStatus(null);
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        // Handle rate limits / cooldowns gracefully
+        const isRateLimit =
+          error.status === 429 ||
+          error.message?.toLowerCase().includes('rate limit') ||
+          error.message?.toLowerCase().includes('cooldown') ||
+          error.message?.toLowerCase().includes('wait');
+
+        const userMsg = isRateLimit
+          ? 'Please wait a little before requesting another confirmation email.'
+          : 'We couldn\'t resend the confirmation email right now. Please try again later.';
+
+        setResendStatus({ type: 'error', message: userMsg });
+      } else {
+        setResendStatus({
+          type: 'success',
+          message: 'Confirmation email sent again. Please check your inbox and spam folder.',
+        });
+      }
+    } catch {
+      setResendStatus({
+        type: 'error',
+        message: 'We couldn\'t resend the confirmation email right now. Please try again later.',
+      });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+    setResendStatus(null);
+    setIsPendingConfirmation(false);
 
     // Validation 1: Required fields check
     if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
@@ -33,10 +84,48 @@ export function SignUpScreen({ onNavigateHome, onNavigateSignIn }) {
       return;
     }
 
-    // All fields valid - show UI mock success state
-    setSuccessMessage(
-      'Account details submitted successfully. Account creation will be enabled when authentication is connected.'
-    );
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+
+      if (data?.user) {
+        // Attempt to upsert the profile in public.profiles (never trust role from frontend)
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            full_name: fullName,
+          }, { onConflict: 'id' });
+
+        if (profileError) {
+          console.warn('[PowerWatch] Profile record upsert notice:', profileError.message);
+        }
+
+        if (data?.session) {
+          setSuccessMessage('Account created successfully!');
+        } else {
+          setIsPendingConfirmation(true);
+          setSuccessMessage(
+            'Account registration initiated! Please check your email inbox to confirm your email address before signing in.'
+          );
+        }
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'An unexpected error occurred during sign up.');
+    }
   };
 
   return (
@@ -129,9 +218,56 @@ export function SignUpScreen({ onNavigateHome, onNavigateSignIn }) {
           )}
 
           {successMessage && (
-            <div className="p-space-sm rounded-lg bg-secondary-container/30 border border-secondary-container text-on-secondary-container text-xs flex items-start gap-space-xs font-medium">
-              <span className="material-symbols-outlined text-[16px] text-secondary shrink-0 mt-0.5">check_circle</span>
-              <span className="leading-relaxed">{successMessage}</span>
+            <div className="flex flex-col gap-space-sm">
+              <div className="p-space-sm rounded-lg bg-secondary-container/30 border border-secondary-container text-on-secondary-container text-xs flex items-start gap-space-xs font-medium">
+                <span className="material-symbols-outlined text-[16px] text-secondary shrink-0 mt-0.5">check_circle</span>
+                <span className="leading-relaxed">{successMessage}</span>
+              </div>
+
+              {isPendingConfirmation && (
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/50 flex flex-col gap-space-xs text-xs">
+                  <div className="text-on-surface font-bold text-xs">
+                    Didn't receive the email?
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    Check your spam folder, or request another confirmation email below.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={isResending}
+                    className="w-full mt-space-xxs py-space-xs px-space-md rounded-lg bg-surface-container-high hover:bg-surface-container-highest disabled:opacity-60 border border-outline-variant/60 text-primary font-bold text-xs transition-colors flex items-center justify-center gap-space-xs cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {isResending ? (
+                      <>
+                        <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[16px]">send</span>
+                        <span>Resend Confirmation Email</span>
+                      </>
+                    )}
+                  </button>
+
+                  {resendStatus && (
+                    <div
+                      className={`mt-space-xs p-space-xs rounded text-[11px] font-medium flex items-center gap-1.5 ${
+                        resendStatus.type === 'success'
+                          ? 'bg-secondary-container/30 text-on-secondary-container border border-secondary-container/50'
+                          : 'bg-error-container/30 text-on-error-container border border-error-container/50'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">
+                        {resendStatus.type === 'success' ? 'check_circle' : 'info'}
+                      </span>
+                      <span>{resendStatus.message}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

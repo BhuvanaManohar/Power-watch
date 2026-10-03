@@ -6,7 +6,10 @@ export function Header({
   onNavigateOutageHistory,
   onNavigateHome,
   onNavigateLiveOutages,
-  currentScreen
+  currentScreen,
+  session,
+  userProfile,
+  onSignOut
 }) {
   const [activeSection, setActiveSection] = useState('home');
 
@@ -124,14 +127,28 @@ export function Header({
 
         {/* Right Header Actions */}
         <div className="flex items-center gap-space-md shrink-0">
-          {/* Sign In Link */}
-          <button
-            type="button"
-            onClick={onNavigateSignIn}
-            className="hidden sm:inline-flex text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors cursor-pointer focus:outline-none"
-          >
-            Sign In
-          </button>
+          {session ? (
+            <div className="flex items-center gap-space-sm">
+              <span className="inline-block text-xs font-semibold text-on-surface-variant">
+                {userProfile?.full_name || session.user?.user_metadata?.full_name || 'User'}
+              </span>
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="inline-flex text-sm font-semibold text-on-surface-variant hover:text-error transition-colors cursor-pointer focus:outline-none"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onNavigateSignIn}
+              className="hidden sm:inline-flex text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors cursor-pointer focus:outline-none"
+            >
+              Sign In
+            </button>
+          )}
 
           {/* Report Outage Action Button */}
           <button
