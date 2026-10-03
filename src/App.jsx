@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabaseClient';
+import { profileApi } from './lib/apiClient';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { LiveOutages } from './components/LiveOutages';
@@ -74,40 +75,38 @@ export default function App() {
 
   const fetchUserProfile = async (userId) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      let activeProfile = null;
 
-      if (error) {
-        console.warn('[PowerWatch] Error fetching profile:', error.message);
-      }
+      try {
+        // Primary profile retrieval: FastAPI GET /api/profile/me
+        activeProfile = await profileApi.getMyProfile();
+        console.log('[PowerWatch] Profile fetched successfully via FastAPI:', activeProfile?.id);
+      } catch (apiErr) {
+        console.warn('[PowerWatch] FastAPI profile fetch notice:', apiErr.message);
 
-      let activeProfile = data;
+        // Self-healing step: if profile does not exist (404/not found), create it with user's authenticated JWT
+        if (apiErr.status === 404 || apiErr.message?.includes('404') || apiErr.message?.includes('not found')) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && user.id === userId) {
+            const fullNameFromMeta = user.user_metadata?.full_name || '';
+            const { data: createdProfile, error: createError } = await supabase
+              .from('profiles')
+              .upsert(
+                {
+                  id: user.id,
+                  full_name: fullNameFromMeta,
+                },
+                { onConflict: 'id' }
+              )
+              .select('*')
+              .maybeSingle();
 
-      // Self-healing step: if profile does not exist, create it with user's authenticated JWT
-      if (!activeProfile) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user && user.id === userId) {
-          const fullNameFromMeta = user.user_metadata?.full_name || '';
-          const { data: createdProfile, error: createError } = await supabase
-            .from('profiles')
-            .upsert(
-              {
-                id: user.id,
-                full_name: fullNameFromMeta,
-              },
-              { onConflict: 'id' }
-            )
-            .select('*')
-            .maybeSingle();
-
-          if (createError) {
-            console.error('[PowerWatch] Self-healing profile creation failed:', createError.message);
-          } else {
-            console.log('[PowerWatch] Missing profile created successfully for user:', user.id);
-            activeProfile = createdProfile;
+            if (createError) {
+              console.error('[PowerWatch] Self-healing profile creation failed:', createError.message);
+            } else {
+              console.log('[PowerWatch] Missing profile created successfully for user:', user.id);
+              activeProfile = createdProfile;
+            }
           }
         }
       }
