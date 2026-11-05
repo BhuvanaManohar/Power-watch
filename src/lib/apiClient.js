@@ -103,3 +103,33 @@ export const locationsApi = {
     return apiRequest(`/api/locations/${id}`, { method: 'GET' });
   },
 };
+
+/**
+ * Reports API services calling FastAPI `/api/reports` endpoints.
+ */
+export const reportsApi = {
+  /**
+   * Submit a new citizen outage report via POST /api/reports
+   * @param {Object} payload - { location_id: string, outage_type: string, description: string, photo_url: string | null }
+   */
+  async createReport(payload) {
+    return apiRequest('/api/reports', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Fetch current authenticated citizen's submitted reports via GET /api/reports/me
+   */
+  async getMyReports() {
+    return apiRequest('/api/reports/me', { method: 'GET' });
+  },
+
+  /**
+   * Fetch a single report by its UUID via GET /api/reports/:id
+   */
+  async getReportById(id) {
+    return apiRequest(`/api/reports/${id}`, { method: 'GET' });
+  },
+};

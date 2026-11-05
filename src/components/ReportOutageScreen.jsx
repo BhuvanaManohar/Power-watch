@@ -1,58 +1,164 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { locationsApi, reportsApi } from '../lib/apiClient';
 
-export function ReportOutageScreen({ onBack, onReportSubmitted }) {
+const OUTAGE_TYPES = {
+  complete: 'Complete Power Outage',
+  partial: 'Partial / Low Voltage Outage',
+  hazard: 'Sparks / Line Down Hazard',
+};
+
+export function ReportOutageScreen({
+  onBack,
+  onReportSubmitted,
+  session,
+  userProfile,
+  onNavigateSignIn,
+}) {
   const [step, setStep] = useState('form'); // 'form' | 'review' | 'tracking'
   const [formData, setFormData] = useState({
-    location: '',
+    locationId: '',
     outageType: 'complete', // 'complete' | 'partial' | 'hazard'
     description: '',
-    photoName: '',
   });
+
+  const [locations, setLocations] = useState([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(true);
+  const [locationsError, setLocationsError] = useState(null);
+  const [locationsRetryCount, setLocationsRetryCount] = useState(0);
+
   const [submittedReport, setSubmittedReport] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  const isAuthenticated = Boolean(session?.user);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    locationsApi
+      .getLocations()
+      .then((data) => {
+        if (isMounted) {
+          setLocations(Array.isArray(data) ? data : []);
+          setLocationsError(null);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setLocationsError(err.message || 'Failed to load municipal sectors');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingLocations(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [locationsRetryCount]);
+
+  const selectedLocation = locations.find((l) => l.id === formData.locationId);
+  const locationDisplayText = selectedLocation
+    ? `${selectedLocation.name}${selectedLocation.address ? ` (${selectedLocation.address})` : ''}`
+    : '';
+
+  const getOutageTypeLabel = (type) => OUTAGE_TYPES[type] || 'Complete Power Outage';
 
   const handleNextReview = (e) => {
     e.preventDefault();
-    if (!formData.location.trim()) {
-      setValidationError('Please enter your location or address.');
+    if (!isAuthenticated) {
+      setValidationError('Please sign in before submitting an outage report.');
+      return;
+    }
+    if (locations.length === 0) {
+      setValidationError('No registered municipal locations available. Reports cannot be filed until locations are configured.');
+      return;
+    }
+    if (!formData.locationId) {
+      setValidationError('Please select an affected municipal location.');
       return;
     }
     setValidationError('');
+    setSubmitError(null);
     setStep('review');
   };
 
-  const handleSubmit = () => {
-    const randomId = `REP-${Math.floor(1000 + Math.random() * 9000)}-DEMO`;
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
 
-    const newReport = {
-      reportId: randomId,
-      submittedTime: `Today at ${timeStr}`,
-      location: formData.location,
-      outageType:
-        formData.outageType === 'complete'
-          ? 'Complete Power Outage'
-          : formData.outageType === 'partial'
-          ? 'Partial / Low Voltage Outage'
-          : 'Sparks / Line Down Hazard',
-      description: formData.description || 'No additional notes provided.',
-      photoAttached: formData.photoName ? true : false,
-      photoName: formData.photoName,
-      status: 'Under Review',
-      trackingStages: [
-        { stage: 'Submitted', timestamp: timeStr, status: 'completed' },
-        { stage: 'Under Review', timestamp: 'In Progress', status: 'current' },
-        { stage: 'Linked to Incident', timestamp: 'Pending', status: 'upcoming' },
-        { stage: 'Resolved', timestamp: 'Pending', status: 'upcoming' },
-      ],
-    };
-
-    setSubmittedReport(newReport);
-    setStep('tracking');
-    if (onReportSubmitted) {
-      onReportSubmitted(newReport);
+    if (!isAuthenticated) {
+      setSubmitError('Authentication required. Please sign in to submit.');
+      return;
     }
+
+    if (!formData.locationId) {
+      setSubmitError('Please select a valid location before submitting.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const payload = {
+        location_id: formData.locationId,
+        outage_type: getOutageTypeLabel(formData.outageType),
+        description: formData.description.trim() || 'Citizen outage report lodged via PowerWatch',
+        photo_url: null,
+      };
+
+      const response = await reportsApi.createReport(payload);
+      setSubmittedReport(response);
+      setStep('tracking');
+      if (onReportSubmitted) {
+        onReportSubmitted(response);
+      }
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to submit outage report. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isFormDisabled = !isAuthenticated || locations.length === 0 || isLoadingLocations;
+
+  const trackingStages = [
+    { stage: 'Submitted', key: 'Submitted' },
+    { stage: 'Under Review', key: 'Under Review' },
+    { stage: 'Linked to Incident', key: 'Linked to Incident' },
+    { stage: 'Resolved', key: 'Resolved' },
+  ];
+
+  const getStageStatus = (stageKey) => {
+    if (!submittedReport) return 'upcoming';
+    const status = submittedReport.status;
+
+    if (status === 'Rejected') {
+      if (stageKey === 'Submitted') return 'completed';
+      if (stageKey === 'Under Review') return 'completed';
+      return 'rejected';
+    }
+    if (status === 'Resolved') {
+      return 'completed';
+    }
+    if (status === 'Linked to Incident') {
+      if (stageKey === 'Submitted' || stageKey === 'Under Review') return 'completed';
+      if (stageKey === 'Linked to Incident') return 'current';
+      return 'upcoming';
+    }
+    if (status === 'Under Review') {
+      if (stageKey === 'Submitted') return 'completed';
+      if (stageKey === 'Under Review') return 'current';
+      return 'upcoming';
+    }
+    if (status === 'Submitted') {
+      if (stageKey === 'Submitted') return 'completed';
+      return 'upcoming';
+    }
+    return 'upcoming';
   };
 
   return (
@@ -66,7 +172,7 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
             className="flex items-center gap-space-xs text-xs font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Back to Main Page</span>
+            <span>Back</span>
           </button>
           <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant bg-surface-container-high px-space-xs py-0.5 rounded">
             Citizen Outage Reporter
@@ -75,7 +181,6 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
       </header>
 
       <main className="flex-1 w-full max-w-2xl mx-auto px-margin md:px-margin-desktop pt-28 pb-space-2xl flex flex-col gap-space-lg">
-        
         {/* Step Indicator */}
         <div className="flex items-center justify-between p-space-sm rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-xs">
           <div className={`flex items-center gap-1.5 font-bold ${step === 'form' ? 'text-primary' : 'text-on-surface-variant'}`}>
@@ -102,9 +207,32 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
                 Report a Power Outage
               </h1>
               <p className="text-xs text-on-surface-variant pt-1">
-                Provide your location and outage type to alert the community and utility dispatch team.
+                {userProfile?.full_name
+                  ? `Logged in as ${userProfile.full_name}. Provide your location and outage type to alert dispatch.`
+                  : 'Provide your location and outage type to alert the community and utility dispatch team.'}
               </p>
             </div>
+
+            {/* Authentication Notice Banner */}
+            {!isAuthenticated && (
+              <div className="p-space-md rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between flex-wrap gap-space-sm text-xs">
+                <div className="flex items-center gap-space-xs text-amber-800 dark:text-amber-300 font-medium">
+                  <span className="material-symbols-outlined text-[20px] text-amber-600">lock</span>
+                  <span>
+                    <strong>Sign-in required:</strong> You must be signed in with a citizen account to lodge an official report.
+                  </span>
+                </div>
+                {onNavigateSignIn && (
+                  <button
+                    type="button"
+                    onClick={onNavigateSignIn}
+                    className="px-space-md py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer shrink-0"
+                  >
+                    Sign In to Report
+                  </button>
+                )}
+              </div>
+            )}
 
             {validationError && (
               <div className="p-space-sm rounded-lg bg-error-container/20 border border-error-container/50 text-error text-xs font-bold flex items-center gap-space-xs">
@@ -115,22 +243,66 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
 
             {/* Location Field */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-on-surface uppercase tracking-wider">
-                Outage Location / Address <span className="text-error">*</span>
+              <label htmlFor="outage-location-select" className="text-xs font-bold text-on-surface uppercase tracking-wider">
+                Outage Location / Sector <span className="text-error">*</span>
               </label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">
-                  location_on
-                </span>
-                <input
-                  type="text"
-                  required
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g. 804 Oak Street, West District"
-                  className="w-full pl-10 pr-space-md py-2.5 text-xs rounded-xl bg-surface-container-low border border-outline-variant/60 text-on-surface focus:outline-none focus:border-primary"
-                />
-              </div>
+
+              {isLoadingLocations ? (
+                <div className="flex items-center gap-space-xs p-space-sm rounded-xl bg-surface-container-low border border-outline-variant/40 text-xs text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[18px] animate-spin text-primary">progress_activity</span>
+                  <span>Loading registered municipal locations...</span>
+                </div>
+              ) : locationsError ? (
+                <div className="p-space-sm rounded-xl bg-error-container/20 border border-error-container/40 text-xs text-error flex items-center justify-between gap-space-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">warning</span>
+                    <span>{locationsError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLoadingLocations(true);
+                      setLocationsRetryCount((c) => c + 1);
+                    }}
+                    className="text-xs font-bold underline hover:opacity-80 cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : locations.length === 0 ? (
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-dashed border-outline-variant/60 flex flex-col gap-1 text-xs">
+                  <div className="flex items-center gap-space-xs text-on-surface font-bold">
+                    <span className="material-symbols-outlined text-[18px] text-amber-500">location_off</span>
+                    <span>No Registered Locations Available</span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant">
+                    No registered municipal grid sectors are currently active in the database. Sectors must be configured before outage reports can be submitted.
+                  </p>
+                </div>
+              ) : (
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px] pointer-events-none">
+                    location_on
+                  </span>
+                  <select
+                    id="outage-location-select"
+                    value={formData.locationId}
+                    onChange={(e) => {
+                      setFormData({ ...formData, locationId: e.target.value });
+                      if (validationError) setValidationError('');
+                    }}
+                    className="w-full pl-10 pr-space-md py-2.5 text-xs rounded-xl bg-surface-container-low border border-outline-variant/60 text-on-surface focus:outline-none focus:border-primary appearance-none cursor-pointer"
+                    required
+                  >
+                    <option value="">Select registered sector / location...</option>
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}{loc.address ? ` — ${loc.address}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Outage Type Selection */}
@@ -197,43 +369,34 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
               />
             </div>
 
-            {/* Photo / Evidence Upload Mock */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-on-surface uppercase tracking-wider">
-                Photo Evidence (Optional)
-              </label>
-              <div className="p-space-md rounded-xl border border-dashed border-outline-variant/80 bg-surface-container-low flex items-center justify-between gap-space-sm">
+            {/* Photo / Evidence Upload (Clearly Disabled for Phase 8) */}
+            <div className="flex flex-col gap-1 opacity-75">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-on-surface uppercase tracking-wider">
+                  Photo Evidence
+                </label>
+                <span className="text-[10px] text-on-surface-variant font-medium bg-surface-container-high px-1.5 py-0.5 rounded">
+                  Feature Disabled
+                </span>
+              </div>
+              <div className="p-space-md rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-low/60 flex items-center justify-between gap-space-sm">
                 <div className="flex items-center gap-space-xs text-xs text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[22px] text-primary">add_a_photo</span>
+                  <span className="material-symbols-outlined text-[22px] text-outline">no_photography</span>
                   <div>
-                    <p className="font-bold text-on-surface">
-                      {formData.photoName || 'Attach Photo of Meter or Hazard'}
+                    <p className="font-bold text-on-surface text-xs">Photo Upload Unavailable</p>
+                    <p className="text-[10px] text-on-surface-variant">
+                      Cloud storage integration is not active in this phase. Reports submit metadata only.
                     </p>
-                    <p className="text-[10px]">PNG, JPG up to 5MB (Demo Preview)</p>
                   </div>
                 </div>
-                <input
-                  type="file"
-                  id="photo-upload"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setFormData({ ...formData, photoName: file.name });
-                    }
-                  }}
-                />
-                <label
-                  htmlFor="photo-upload"
-                  className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest border border-outline-variant/60 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer shrink-0"
-                >
-                  {formData.photoName ? 'Change File' : 'Browse File'}
-                </label>
+                <span className="px-space-sm py-1 rounded bg-surface-container-high text-[10px] font-bold text-on-surface-variant border border-outline-variant/40 shrink-0">
+                  Disabled
+                </span>
               </div>
             </div>
 
             {/* Form Actions */}
-            <div className="flex items-center justify-end gap-space-sm pt-space-xs border-t border-outline-variant/40">
+            <div className="flex items-center justify-between gap-space-sm pt-space-xs border-t border-outline-variant/40">
               <button
                 type="button"
                 onClick={onBack}
@@ -241,11 +404,19 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
               >
                 Cancel
               </button>
+
               <button
                 type="submit"
-                className="px-space-lg py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer inline-flex items-center gap-1"
+                disabled={isFormDisabled}
+                className="px-space-lg py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span>Next: Review Report</span>
+                <span>
+                  {!isAuthenticated
+                    ? 'Sign In Required'
+                    : locations.length === 0
+                    ? 'No Locations Available'
+                    : 'Next: Review Report'}
+                </span>
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
             </div>
@@ -262,35 +433,34 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
               </p>
             </div>
 
+            {submitError && (
+              <div className="p-space-sm rounded-lg bg-error-container/20 border border-error-container/50 text-error text-xs font-bold flex items-center gap-space-xs">
+                <span className="material-symbols-outlined text-[16px]">error</span>
+                <span>{submitError}</span>
+              </div>
+            )}
+
             <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/40 flex flex-col gap-space-xs text-xs">
               <div className="flex items-center justify-between pb-space-xxs border-b border-outline-variant/30">
                 <span className="text-on-surface-variant font-bold uppercase text-[10px]">Location</span>
-                <span className="font-bold text-on-surface">{formData.location}</span>
+                <span className="font-bold text-on-surface">{locationDisplayText || formData.locationId}</span>
               </div>
 
               <div className="flex items-center justify-between pb-space-xxs border-b border-outline-variant/30">
                 <span className="text-on-surface-variant font-bold uppercase text-[10px]">Outage Type</span>
-                <span className="font-bold text-primary">
-                  {formData.outageType === 'complete'
-                    ? 'Complete Power Outage'
-                    : formData.outageType === 'partial'
-                    ? 'Partial / Low Voltage Outage'
-                    : 'Sparks / Line Down Hazard'}
-                </span>
+                <span className="font-bold text-primary">{getOutageTypeLabel(formData.outageType)}</span>
               </div>
 
               <div className="flex flex-col gap-0.5 pb-space-xxs border-b border-outline-variant/30">
                 <span className="text-on-surface-variant font-bold uppercase text-[10px]">Description</span>
                 <p className="text-on-surface leading-relaxed">
-                  {formData.description || 'No additional notes provided.'}
+                  {formData.description.trim() || 'No additional notes provided.'}
                 </p>
               </div>
 
               <div className="flex items-center justify-between">
                 <span className="text-on-surface-variant font-bold uppercase text-[10px]">Photo Evidence</span>
-                <span className="font-semibold text-on-surface">
-                  {formData.photoName ? `Attached: ${formData.photoName}` : 'None provided'}
-                </span>
+                <span className="font-semibold text-on-surface-variant text-[11px]">None (feature disabled)</span>
               </div>
             </div>
 
@@ -298,17 +468,28 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
               <button
                 type="button"
                 onClick={() => setStep('form')}
-                className="px-space-md py-2 rounded-xl border border-outline-variant/60 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer"
+                disabled={isSubmitting}
+                className="px-space-md py-2 rounded-xl border border-outline-variant/60 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer disabled:opacity-50"
               >
                 Edit Information
               </button>
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="px-space-lg py-2 rounded-xl bg-secondary text-on-secondary text-xs font-bold hover:bg-secondary/90 transition-colors cursor-pointer inline-flex items-center gap-1"
+                disabled={isSubmitting}
+                className="px-space-lg py-2 rounded-xl bg-secondary text-on-secondary text-xs font-bold hover:bg-secondary/90 transition-colors cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span className="material-symbols-outlined text-[16px]">send</span>
-                <span>Submit Outage Report</span>
+                {isSubmitting ? (
+                  <>
+                    <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                    <span>Submitting Report...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">send</span>
+                    <span>Submit Outage Report</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -317,31 +498,49 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
         {/* STEP 3: SUBMISSION CONFIRMATION & TRACKING */}
         {step === 'tracking' && submittedReport && (
           <div className="p-space-xl rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-lg">
-            
-            {/* Success Banner */}
-            <div className="p-space-md rounded-xl bg-secondary-container/20 border border-secondary-container/50 flex items-start gap-space-sm">
-              <span className="material-symbols-outlined text-secondary text-3xl">check_circle</span>
-              <div>
-                <h3 className="text-base font-bold text-on-surface">Outage Report Submitted Successfully</h3>
-                <p className="text-xs text-on-surface-variant pt-0.5">
-                  Your report has been logged and queued for department verification. Keep your Demo Report ID for tracking.
-                </p>
+            {/* Status Banner */}
+            {submittedReport.status === 'Rejected' ? (
+              <div className="p-space-md rounded-xl bg-error-container/20 border border-error-container/50 flex items-start gap-space-sm">
+                <span className="material-symbols-outlined text-error text-3xl">cancel</span>
+                <div>
+                  <h3 className="text-base font-bold text-on-surface">Outage Report Closed / Rejected</h3>
+                  <p className="text-xs text-on-surface-variant pt-0.5">
+                    This report was reviewed and marked as rejected by operations.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-space-md rounded-xl bg-secondary-container/20 border border-secondary-container/50 flex items-start gap-space-sm">
+                <span className="material-symbols-outlined text-secondary text-3xl">check_circle</span>
+                <div>
+                  <h3 className="text-base font-bold text-on-surface">Outage Report Submitted Successfully</h3>
+                  <p className="text-xs text-on-surface-variant pt-0.5">
+                    Your report has been logged and queued for department verification. Keep your Report ID for tracking.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Summary Details */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-xs p-space-md rounded-xl bg-surface-container-low border border-outline-variant/40 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-xs p-space-md rounded-xl bg-surface-container-low border border-outline-variant/40 text-xs">
               <div>
-                <span className="text-on-surface-variant uppercase font-bold text-[10px] block">Demo Report ID</span>
-                <span className="font-mono font-bold text-primary text-sm">{submittedReport.reportId}</span>
+                <span className="text-on-surface-variant uppercase font-bold text-[10px] block">Report ID</span>
+                <span className="font-mono font-bold text-primary text-xs break-all">{submittedReport.id}</span>
               </div>
               <div>
                 <span className="text-on-surface-variant uppercase font-bold text-[10px] block">Submitted Time</span>
-                <span className="font-bold text-on-surface">{submittedReport.submittedTime}</span>
+                <span className="font-bold text-on-surface">
+                  {new Date(submittedReport.created_at).toLocaleString([], {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </span>
               </div>
-              <div className="col-span-2">
+              <div>
                 <span className="text-on-surface-variant uppercase font-bold text-[10px] block">Reported Location</span>
-                <span className="font-bold text-on-surface truncate block">{submittedReport.location}</span>
+                <span className="font-bold text-on-surface truncate block">
+                  {locationDisplayText || submittedReport.location_id}
+                </span>
               </div>
             </div>
 
@@ -351,35 +550,78 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface">
                   Report Status Lifecycle Tracker
                 </h4>
-                <span className="px-space-xs py-0.5 rounded-full text-[10px] font-bold bg-primary-container text-on-primary-container">
+                <span
+                  className={`px-space-xs py-0.5 rounded-full text-[10px] font-bold ${
+                    submittedReport.status === 'Rejected'
+                      ? 'bg-error-container/40 text-error border border-error-container/60'
+                      : 'bg-primary-container text-on-primary-container'
+                  }`}
+                >
                   {submittedReport.status}
                 </span>
               </div>
 
               <div className="grid grid-cols-4 gap-space-xs pt-space-xs text-center relative">
-                {submittedReport.trackingStages.map((st, idx) => {
-                  const isDone = st.status === 'completed';
-                  const isCurrent = st.status === 'current';
+                {trackingStages.map((st, idx) => {
+                  const stageStatus = getStageStatus(st.key);
+                  const isDone = stageStatus === 'completed';
+                  const isCurrent = stageStatus === 'current';
+                  const isRejected = stageStatus === 'rejected';
 
-                  const badgeClass = isDone
+                  const badgeClass = isRejected
+                    ? 'bg-error-container/40 text-error border border-error-container/60'
+                    : isDone
                     ? 'bg-secondary text-on-secondary ring-2 ring-secondary/30'
                     : isCurrent
                     ? 'bg-primary text-on-primary ring-4 ring-primary/20 animate-pulse'
                     : 'bg-surface-container-high border border-outline-variant text-outline';
 
+                  const statusSubtext = isRejected
+                    ? 'Closed'
+                    : isDone
+                    ? 'Completed'
+                    : isCurrent
+                    ? 'Active'
+                    : 'Pending';
+
                   return (
                     <div key={st.stage} className="flex flex-col items-center gap-1 relative z-10">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${badgeClass}`}>
-                        {isDone ? <span className="material-symbols-outlined text-[14px]">check</span> : idx + 1}
+                        {isRejected ? (
+                          <span className="material-symbols-outlined text-[14px]">close</span>
+                        ) : isDone ? (
+                          <span className="material-symbols-outlined text-[14px]">check</span>
+                        ) : (
+                          idx + 1
+                        )}
                       </div>
-                      <span className={`text-[11px] font-bold ${isCurrent ? 'text-primary' : isDone ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
+                      <span
+                        className={`text-[11px] font-bold ${
+                          isRejected
+                            ? 'text-error'
+                            : isCurrent
+                            ? 'text-primary'
+                            : isDone
+                            ? 'text-on-surface'
+                            : 'text-on-surface-variant/60'
+                        }`}
+                      >
                         {st.stage}
                       </span>
-                      <span className="text-[10px] text-on-surface-variant font-mono">{st.timestamp}</span>
+                      <span className="text-[10px] text-on-surface-variant font-mono">
+                        {statusSubtext}
+                      </span>
                     </div>
                   );
                 })}
               </div>
+
+              {submittedReport.status === 'Rejected' && (
+                <div className="p-space-xs px-space-sm rounded-lg bg-error-container/15 border border-error-container/30 text-[11px] text-error flex items-center gap-1.5 font-medium mt-1">
+                  <span className="material-symbols-outlined text-[16px]">info</span>
+                  <span>Review concluded: This report was marked as rejected by operations.</span>
+                </div>
+              )}
             </div>
 
             {/* Final Actions */}
@@ -387,7 +629,8 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
               <button
                 type="button"
                 onClick={() => {
-                  setFormData({ location: '', outageType: 'complete', description: '', photoName: '' });
+                  setFormData({ locationId: '', outageType: 'complete', description: '' });
+                  setSubmittedReport(null);
                   setStep('form');
                 }}
                 className="px-space-md py-2 rounded-xl border border-outline-variant/60 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer"
@@ -399,7 +642,7 @@ export function ReportOutageScreen({ onBack, onReportSubmitted }) {
                 onClick={onBack}
                 className="px-space-lg py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer"
               >
-                Back to Home Page
+                Back
               </button>
             </div>
           </div>

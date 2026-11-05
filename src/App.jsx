@@ -269,7 +269,7 @@ export default function App() {
   const [notifications, setNotifications] = useState(initialNotificationsData);
   const [toasts, setToasts] = useState([]);
   
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(undefined);
   const [userProfile, setUserProfile] = useState(null);
   const [verificationState] = useState({
     isSuccess: initialVerification ? initialVerification.isSuccess : true,
@@ -456,7 +456,7 @@ export default function App() {
   useEffect(() => {
     // 1. Fetch initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      setSession(session || null);
       if (session?.user) {
         fetchUserProfile(session.user.id);
       }
@@ -580,6 +580,8 @@ export default function App() {
   } else if (currentScreen === 'citizen-demo') {
     content = (
       <CitizenDashboard
+        session={session}
+        userProfile={userProfile}
         notifications={notifications}
         onMarkAsRead={handleMarkNotificationAsRead}
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
@@ -587,6 +589,7 @@ export default function App() {
           navigateTo('incident-detail', { incidentId: id });
         }}
         onNavigateHome={() => navigateTo('signin')}
+        onNavigateSignIn={() => navigateTo('signin')}
         onNavigateReportOutage={() => navigateTo('report-outage')}
         onNavigateLiveOutages={handleNavigateLiveOutages}
       />
@@ -642,6 +645,9 @@ export default function App() {
   } else if (currentScreen === 'report-outage') {
     content = (
       <ReportOutageScreen
+        session={session}
+        userProfile={userProfile}
+        onNavigateSignIn={() => navigateTo('signin')}
         onBack={() => {
           if (window.history.length > 1 && window.location.hash === '#report-outage') {
             window.history.back();
@@ -650,9 +656,10 @@ export default function App() {
           }
         }}
         onReportSubmitted={(report) => {
+          const reportIdentifier = report?.id || report?.reportId || 'Outage Report';
           setToasts((prev) => [
             ...prev,
-            { id: Date.now(), type: 'success', message: `Report ${report.reportId} logged successfully!` },
+            { id: Date.now(), type: 'success', message: `Report ${reportIdentifier} logged successfully!` },
           ]);
         }}
       />
