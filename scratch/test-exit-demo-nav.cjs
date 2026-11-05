@@ -142,12 +142,15 @@ const { chromium } = require('playwright');
   await page.locator('button', { hasText: 'Save & Publish Updated ETR' }).click();
   await page.waitForTimeout(200);
 
-  // Tab 4: Publish Log
-  await page.locator('button', { hasText: 'Publish Log' }).click();
+  // Tab 4: Publish Citizen Update / Log
+  const publishTab = page.locator('button', { hasText: /Publish (Citizen Update|Log)/ });
+  await publishTab.click();
   await page.waitForTimeout(100);
-  await page.locator('input[placeholder="e.g. Field crew dispatched and restoration work in progress"]').fill('Field crew dispatched and restoration work is in progress.');
+  const titleInput = page.locator('input[placeholder*="en route"], input[placeholder*="restoration work"]');
+  await titleInput.fill('Field crew dispatched and restoration work is in progress.');
   await page.locator('textarea').fill('Feeder line isolated; switchgear replacement active.');
-  await page.locator('button', { hasText: 'Publish Log to Incident Record' }).click();
+  const publishBtn = page.locator('button', { hasText: /Publish Citizen-Facing Update|Publish Log to Incident Record/ });
+  await publishBtn.click();
   await page.waitForTimeout(200);
 
   // Mark Power Restored
@@ -157,7 +160,7 @@ const { chromium } = require('playwright');
   await page.waitForTimeout(200);
 
   // Close Modal
-  await page.locator('button', { hasText: 'Done' }).click();
+  await page.locator('button', { hasText: 'Done' }).click({ force: true });
   await page.waitForTimeout(300);
 
   // TEST 7: Live Outages -> View Incident -> Incident Detail -> Back to Live Outages

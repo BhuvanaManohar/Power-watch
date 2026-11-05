@@ -52,6 +52,26 @@ export function formatRelativeTime(isoString) {
   }
 }
 
+/**
+ * Checks whether an incident record has valid, non-null geographic coordinates.
+ * Validates that latitude is within [-90, 90] and longitude is within [-180, 180].
+ */
+export function hasValidCoordinates(incident) {
+  if (!incident) return false;
+  const lat = incident.latitude ?? incident.location?.latitude ?? incident.raw?.location?.latitude;
+  const lng = incident.longitude ?? incident.location?.longitude ?? incident.raw?.location?.longitude;
+  return (
+    typeof lat === 'number' &&
+    !isNaN(lat) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    typeof lng === 'number' &&
+    !isNaN(lng) &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
 const STATUS_MAP = {
   investigating: {
     category: 'investigating',
@@ -202,6 +222,13 @@ export function adaptIncident(backendIncident, backendLocation = null) {
     },
   ];
 
+  const lat = typeof backendLocation?.latitude === 'number' && !isNaN(backendLocation.latitude)
+    ? backendLocation.latitude
+    : null;
+  const lng = typeof backendLocation?.longitude === 'number' && !isNaN(backendLocation.longitude)
+    ? backendLocation.longitude
+    : null;
+
   return {
     id,
     incidentId: shortId,
@@ -210,6 +237,9 @@ export function adaptIncident(backendIncident, backendLocation = null) {
     areaName,
     locationId: backendIncident.location_id,
     location: backendLocation || null,
+    latitude: lat,
+    longitude: lng,
+    hasCoordinates: lat !== null && lng !== null,
     // Status mappings
     category: statusConfig.category,
     statusText: statusConfig.statusText,

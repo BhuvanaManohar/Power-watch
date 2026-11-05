@@ -12,12 +12,56 @@ const { chromium } = require('playwright');
   page.on('console', msg => console.log('  [BROWSER CONSOLE]', msg.text()));
   page.on('pageerror', err => console.log('  [BROWSER ERROR]', err.message));
 
+  const baseUrl = process.env.TEST_BASE_URL || 'http://localhost:5173';
+
   try {
+    const testIncidents = [
+      {
+        id: 'west-district',
+        location_id: 'loc-west',
+        title: 'Oak & 8th Avenue Corridor (West District)',
+        status: 'investigating',
+        severity: 'High',
+        outage_type: 'Downed Wire',
+        affected_households: 120,
+        assigned_crew: 'None',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    const testLocations = [
+      {
+        id: 'loc-west',
+        name: 'Oak & 8th Avenue Corridor',
+        address: 'Oak St & 8th Ave',
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
+    ];
+
+    await page.route(/\/api\/locations$/, (route) => {
+      route.fulfill({
+        status: 200,
+        headers: { 'access-control-allow-origin': '*' },
+        contentType: 'application/json',
+        body: JSON.stringify(testLocations),
+      });
+    });
+
+    await page.route(/\/api\/incidents(\?.*)?$/, (route) => {
+      route.fulfill({
+        status: 200,
+        headers: { 'access-control-allow-origin': '*' },
+        contentType: 'application/json',
+        body: JSON.stringify(testIncidents),
+      });
+    });
+
     // -------------------------------------------------------------
     // TEST 1: Fresh Tab - Clean History
     // -------------------------------------------------------------
     console.log('\n--- TEST 1: Clean Session & Initial State ---');
-    await page.goto('http://localhost:4174/', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
 
     const initialTitle = await page.innerText('main h1');
@@ -105,7 +149,7 @@ const { chromium } = require('playwright');
     // -------------------------------------------------------------
     console.log('\n--- TEST 4: Home -> Live Outages -> Incident -> Back -> Back -> Forward -> Forward ---');
     // Start at Home
-    await page.goto('http://localhost:4174/', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(300);
 
     // Step 1: Click Live Outages
@@ -156,7 +200,7 @@ const { chromium } = require('playwright');
     // -------------------------------------------------------------
     console.log('\n--- TEST 5: Direct URL Loading & Page Refresh ---');
     // Direct load North Crestview incident
-    await page.goto('http://localhost:4174/#incident/north-crestview', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/#incident/north-crestview`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
     const ncTitle = await page.innerText('h1');
     console.log('  Direct load incident title:', ncTitle);
@@ -174,7 +218,7 @@ const { chromium } = require('playwright');
     }
 
     // Direct load Outage History
-    await page.goto('http://localhost:4174/#outage-history', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/#outage-history`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
     const historyTitle = await page.innerText('main h1');
     console.log('  Direct load Outage History title:', historyTitle);
@@ -183,7 +227,7 @@ const { chromium } = require('playwright');
     }
 
     // Direct load Sign In
-    await page.goto('http://localhost:4174/#signin', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/#signin`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
     const signInTitle = await page.innerText('main h1');
     console.log('  Direct load Sign In title:', signInTitle);
@@ -196,7 +240,7 @@ const { chromium } = require('playwright');
     // TEST 6: Sign In -> Sign Up -> Back -> Forward
     // -------------------------------------------------------------
     console.log('\n--- TEST 6: Sign In -> Sign Up -> Back -> Forward ---');
-    await page.goto('http://localhost:4174/#signin', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/#signin`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(300);
 
     // Click "Create an account"
@@ -228,7 +272,7 @@ const { chromium } = require('playwright');
     // TEST 7: On-Screen Back Button vs Native Back Interop
     // -------------------------------------------------------------
     console.log('\n--- TEST 7: On-screen "Back to Live Outages" Button Interop ---');
-    await page.goto('http://localhost:4174/', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(300);
 
     // Navigate to Live Outages then Incident
