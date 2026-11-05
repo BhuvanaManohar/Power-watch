@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-export function Footer({ onNavigateSignIn }) {
+export function Footer({
+  onNavigateSignIn,
+  onNavigateOutageHistory,
+  onNavigateHome,
+  onNavigateLiveOutages,
+}) {
   return (
     <footer className="w-full bg-surface-container-low border-t border-outline-variant/30 py-space-xl px-margin md:px-margin-desktop">
       <div className="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
@@ -21,15 +26,36 @@ export function Footer({ onNavigateSignIn }) {
 
           {/* Navigation Links matching Header */}
           <nav className="flex flex-wrap items-center gap-space-lg text-xs font-semibold text-on-surface-variant">
-            <a href="#" className="hover:text-primary transition-colors">
+            <a
+              href="#"
+              onClick={(e) => {
+                if (onNavigateHome) {
+                  e.preventDefault();
+                  onNavigateHome();
+                }
+              }}
+              className="hover:text-primary transition-colors"
+            >
               Home
             </a>
-            <a href="#map-monitor" className="hover:text-primary transition-colors">
+            <a
+              href="#map-monitor"
+              onClick={(e) => {
+                if (onNavigateLiveOutages) {
+                  e.preventDefault();
+                  onNavigateLiveOutages();
+                }
+              }}
+              className="hover:text-primary transition-colors"
+            >
               Live Outages
             </a>
             <a
               href="#outage-history"
-              onClick={(e) => { e.preventDefault(); }}
+              onClick={(e) => {
+                e.preventDefault();
+                if (onNavigateOutageHistory) onNavigateOutageHistory();
+              }}
               className="hover:text-primary transition-colors cursor-pointer"
             >
               Outage History

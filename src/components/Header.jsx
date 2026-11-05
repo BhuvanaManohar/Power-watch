@@ -40,7 +40,7 @@ export function Header({
   const isOutageHistoryActive = currentScreen === 'outage-history';
 
   const handleNavClick = (e, sectionId, customNavigate) => {
-    if (currentScreen === 'outage-history') {
+    if (currentScreen !== 'landing') {
       e.preventDefault();
       if (customNavigate) {
         customNavigate();
@@ -52,6 +52,26 @@ export function Header({
             if (el) el.scrollIntoView({ behavior: 'smooth' });
           }, 50);
         }
+      }
+    } else {
+      // On landing screen
+      if (customNavigate) {
+        e.preventDefault();
+        customNavigate();
+      } else if (sectionId) {
+        e.preventDefault();
+        const el = document.getElementById(sectionId);
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        if (window.location.hash !== `#${sectionId}`) {
+          window.history.pushState(
+            { screen: 'landing', section: sectionId, powerWatchInternal: true },
+            '',
+            `#${sectionId}`
+          );
+        }
+      } else if (onNavigateHome) {
+        e.preventDefault();
+        onNavigateHome();
       }
     }
   };

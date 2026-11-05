@@ -367,7 +367,11 @@ export function OutageHistoryScreen({
 
       </main>
 
-      <Footer onNavigateSignIn={onNavigateSignIn} />
+      <Footer
+        onNavigateSignIn={onNavigateSignIn}
+        onNavigateHome={onNavigateHome}
+        onNavigateLiveOutages={onNavigateLiveOutages}
+      />
     </div>
   );
 }

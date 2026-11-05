@@ -56,11 +56,96 @@ function checkVerificationCallback() {
   return null;
 }
 
+function parseRouteFromLocation() {
+  if (typeof window === 'undefined') return { screen: 'landing', section: 'home' };
+
+  const verification = checkVerificationCallback();
+  if (verification) {
+    return { screen: 'verification-success', isVerification: true, verification };
+  }
+
+  const hash = window.location.hash || '';
+  const pathname = window.location.pathname || '';
+
+  let routePath = '';
+  if (hash) {
+    routePath = hash.replace(/^#\/?/, '');
+  } else if (pathname && pathname !== '/') {
+    routePath = pathname.replace(/^\//, '');
+  }
+
+  // Handle Incident Detail: incident/:id or incident-detail/:id
+  if (routePath.startsWith('incident/')) {
+    const incidentId = routePath.replace('incident/', '').split('?')[0].split('/')[0];
+    return { screen: 'incident-detail', incidentId: decodeURIComponent(incidentId) };
+  }
+  if (routePath.startsWith('incident-detail/')) {
+    const incidentId = routePath.replace('incident-detail/', '').split('?')[0].split('/')[0];
+    return { screen: 'incident-detail', incidentId: decodeURIComponent(incidentId) };
+  }
+
+  if (routePath === 'outage-history') return { screen: 'outage-history' };
+  if (routePath === 'report-outage') return { screen: 'report-outage' };
+  if (routePath === 'signin') return { screen: 'signin' };
+  if (routePath === 'signup') return { screen: 'signup' };
+  if (routePath === 'citizen-demo') return { screen: 'citizen-demo' };
+  if (routePath === 'department-demo') return { screen: 'department-demo' };
+  if (routePath === 'report-grouping') return { screen: 'report-grouping' };
+  if (routePath === 'verify') return { screen: 'verification-success' };
+
+  if (routePath === 'map-monitor' || routePath === 'live-outages') {
+    return { screen: 'landing', section: 'map-monitor' };
+  }
+  if (routePath === 'how-it-works') {
+    return { screen: 'landing', section: 'how-it-works' };
+  }
+  if (routePath === 'citizens-and-teams') {
+    return { screen: 'landing', section: 'citizens-and-teams' };
+  }
+
+  return { screen: 'landing', section: 'home' };
+}
+
+function getHashForRoute(screen, incidentId, section) {
+  switch (screen) {
+    case 'incident-detail':
+      return `#incident/${incidentId || 'west-district'}`;
+    case 'outage-history':
+      return '#outage-history';
+    case 'report-outage':
+      return '#report-outage';
+    case 'signin':
+      return '#signin';
+    case 'signup':
+      return '#signup';
+    case 'citizen-demo':
+      return '#citizen-demo';
+    case 'department-demo':
+      return '#department-demo';
+    case 'report-grouping':
+      return '#report-grouping';
+    case 'verification-success':
+      return '#verify';
+    case 'landing':
+    default:
+      if (section && section !== 'home') {
+        return `#${section}`;
+      }
+      return '#';
+  }
+}
+
 export default function App() {
   const initialVerification = checkVerificationCallback();
-  const [currentScreen, setCurrentScreen] = useState(initialVerification?.screen || 'landing');
+  const initialRoute = parseRouteFromLocation();
+
+  const [currentScreen, setCurrentScreen] = useState(
+    initialVerification?.screen || initialRoute.screen || 'landing'
+  );
   const [previousScreen, setPreviousScreen] = useState('landing');
-  const [selectedIncidentId, setSelectedIncidentId] = useState('west-district');
+  const [selectedIncidentId, setSelectedIncidentId] = useState(
+    initialRoute.incidentId || 'west-district'
+  );
   const [incidentsData, setIncidentsData] = useState(initialIncidentsData);
   const [crewsData, setCrewsData] = useState(initialCrewsData);
   const [notifications, setNotifications] = useState(initialNotificationsData);
@@ -72,6 +157,122 @@ export default function App() {
     isSuccess: initialVerification ? initialVerification.isSuccess : true,
     errorMessage: initialVerification ? initialVerification.errorMessage : '',
   });
+
+  const navigateTo = (screen, options = {}) => {
+    const { incidentId = null, section = null, replace = false } = options;
+    const targetIncidentId = incidentId || (screen === 'incident-detail' ? selectedIncidentId : null);
+    const targetHash = getHashForRoute(screen, targetIncidentId, section);
+
+    // If opening an incident from landing when no hash is in URL yet,
+    // replace current entry with #map-monitor so browser Back returns to Live Outages instead of skipping it:
+    if (
+      screen === 'incident-detail' &&
+      currentScreen === 'landing' &&
+      (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/')
+    ) {
+      window.history.replaceState(
+        { screen: 'landing', section: 'map-monitor', powerWatchInternal: true },
+        '',
+        '#map-monitor'
+      );
+    }
+
+    setPreviousScreen(currentScreen);
+    setCurrentScreen(screen);
+    if (targetIncidentId) {
+      setSelectedIncidentId(targetIncidentId);
+    }
+
+    const stateObj = {
+      screen,
+      incidentId: targetIncidentId,
+      section,
+      powerWatchInternal: true,
+    };
+
+    const currentHash = window.location.hash || '';
+    if (currentHash !== targetHash || window.history.state?.screen !== screen) {
+      if (replace) {
+        window.history.replaceState(stateObj, '', targetHash || window.location.pathname);
+      } else {
+        window.history.pushState(stateObj, '', targetHash || window.location.pathname);
+      }
+    }
+
+    if (screen === 'landing') {
+      if (section && section !== 'home') {
+        setTimeout(() => {
+          const el = document.getElementById(section);
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } else {
+      window.scrollTo({ top: 0 });
+    }
+  };
+
+  const handleBackFromIncident = () => {
+    navigateTo('landing', { section: 'map-monitor' });
+  };
+
+  // Initialize initial history entry state without pushing extra entry
+  useEffect(() => {
+    const currentHash = window.location.hash || '';
+    const currentRoute = parseRouteFromLocation();
+    const initialState = {
+      screen: currentRoute.screen,
+      incidentId: currentRoute.incidentId || null,
+      section: currentRoute.section || null,
+      powerWatchInternal: true,
+    };
+
+    window.history.replaceState(
+      initialState,
+      '',
+      currentHash || window.location.pathname || '#'
+    );
+
+    if (currentRoute.screen === 'landing' && currentRoute.section && currentRoute.section !== 'home') {
+      setTimeout(() => {
+        const el = document.getElementById(currentRoute.section);
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, []);
+
+  // Listen to browser Back and Forward navigation events
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = parseRouteFromLocation();
+      console.log('[PowerWatch Navigation] Popstate/Hashchange triggered:', window.location.hash, route);
+
+      setCurrentScreen(route.screen);
+      if (route.incidentId) {
+        setSelectedIncidentId(route.incidentId);
+      }
+
+      if (route.screen === 'landing') {
+        if (route.section && route.section !== 'home') {
+          setTimeout(() => {
+            const el = document.getElementById(route.section);
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 50);
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } else {
+        window.scrollTo({ top: 0 });
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   const fetchUserProfile = async (userId) => {
     try {
@@ -117,9 +318,15 @@ export default function App() {
       const role = activeProfile?.role || 'citizen';
       setCurrentScreen((prev) => {
         if (prev === 'signin' || prev === 'signup') {
-          return role === 'officer' || role === 'department' || role === 'utility' || role === 'admin'
+          const nextScreen = role === 'officer' || role === 'department' || role === 'utility' || role === 'admin'
             ? 'department-demo'
             : 'landing';
+          window.history.replaceState(
+            { screen: nextScreen, powerWatchInternal: true },
+            '',
+            getHashForRoute(nextScreen)
+          );
+          return nextScreen;
         }
         return prev;
       });
@@ -147,6 +354,11 @@ export default function App() {
       } else if (event === 'SIGNED_OUT') {
         setUserProfile(null);
         setCurrentScreen('landing');
+        window.history.replaceState(
+          { screen: 'landing', powerWatchInternal: true },
+          '',
+          '#'
+        );
       }
     });
 
@@ -190,11 +402,7 @@ export default function App() {
   };
 
   const handleNavigateLiveOutages = () => {
-    setCurrentScreen('landing');
-    setTimeout(() => {
-      const el = document.getElementById('map-monitor');
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+    navigateTo('landing', { section: 'map-monitor' });
   };
 
   const handleUpdateIncident = (updated) => {
@@ -219,17 +427,17 @@ export default function App() {
   if (currentScreen === 'signin') {
     content = (
       <SignInScreen
-        onNavigateHome={() => setCurrentScreen('landing')}
-        onNavigateSignUp={() => setCurrentScreen('signup')}
-        onNavigateCitizenDemo={() => setCurrentScreen('citizen-demo')}
-        onNavigateDepartmentDemo={() => setCurrentScreen('department-demo')}
+        onNavigateHome={() => navigateTo('landing')}
+        onNavigateSignUp={() => navigateTo('signup')}
+        onNavigateCitizenDemo={() => navigateTo('citizen-demo')}
+        onNavigateDepartmentDemo={() => navigateTo('department-demo')}
       />
     );
   } else if (currentScreen === 'signup') {
     content = (
       <SignUpScreen
-        onNavigateHome={() => setCurrentScreen('landing')}
-        onNavigateSignIn={() => setCurrentScreen('signin')}
+        onNavigateHome={() => navigateTo('landing')}
+        onNavigateSignIn={() => navigateTo('signin')}
       />
     );
   } else if (currentScreen === 'verification-success') {
@@ -241,13 +449,13 @@ export default function App() {
           if (window.location.hash || window.location.search) {
             window.history.replaceState(null, '', window.location.pathname);
           }
-          setCurrentScreen('signin');
+          navigateTo('signin');
         }}
         onNavigateSignUp={() => {
           if (window.location.hash || window.location.search) {
             window.history.replaceState(null, '', window.location.pathname);
           }
-          setCurrentScreen('signup');
+          navigateTo('signup');
         }}
       />
     );
@@ -258,12 +466,10 @@ export default function App() {
         onMarkAsRead={handleMarkNotificationAsRead}
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
         onViewIncidentDetail={(id) => {
-          setSelectedIncidentId(id);
-          setPreviousScreen('citizen-demo');
-          setCurrentScreen('incident-detail');
+          navigateTo('incident-detail', { incidentId: id });
         }}
-        onNavigateHome={() => setCurrentScreen('signin')}
-        onNavigateReportOutage={() => setCurrentScreen('report-outage')}
+        onNavigateHome={() => navigateTo('signin')}
+        onNavigateReportOutage={() => navigateTo('report-outage')}
         onNavigateLiveOutages={handleNavigateLiveOutages}
       />
     );
@@ -275,13 +481,11 @@ export default function App() {
         onUpdateIncident={handleUpdateIncident}
         onAssignCrew={handleAssignCrew}
         onPublishNotification={handlePublishNotification}
-        onNavigateHome={() => setCurrentScreen('signin')}
+        onNavigateHome={() => navigateTo('signin')}
         onNavigateLiveOutages={handleNavigateLiveOutages}
-        onNavigateReportGrouping={() => setCurrentScreen('report-grouping')}
+        onNavigateReportGrouping={() => navigateTo('report-grouping')}
         onViewIncidentDetail={(id) => {
-          setSelectedIncidentId(id);
-          setPreviousScreen('department-demo');
-          setCurrentScreen('incident-detail');
+          navigateTo('incident-detail', { incidentId: id });
         }}
       />
     );
@@ -290,22 +494,22 @@ export default function App() {
       <IncidentDetailScreen
         incidentId={selectedIncidentId}
         incidentsData={incidentsData}
-        onBack={() => {
-          if (previousScreen === 'outage-history') {
-            setCurrentScreen('outage-history');
-          } else {
-            handleNavigateLiveOutages();
-          }
-        }}
-        onBackToOutageHistory={() => setCurrentScreen('outage-history')}
-        onBackToCitizenPortal={() => setCurrentScreen('citizen-demo')}
-        onBackToDepartmentPortal={() => setCurrentScreen('department-demo')}
+        onBack={handleBackFromIncident}
+        onBackToOutageHistory={() => navigateTo('outage-history')}
+        onBackToCitizenPortal={() => navigateTo('citizen-demo')}
+        onBackToDepartmentPortal={() => navigateTo('department-demo')}
       />
     );
   } else if (currentScreen === 'report-outage') {
     content = (
       <ReportOutageScreen
-        onBack={() => setCurrentScreen('landing')}
+        onBack={() => {
+          if (window.history.length > 1 && window.location.hash === '#report-outage') {
+            window.history.back();
+          } else {
+            navigateTo('landing');
+          }
+        }}
         onReportSubmitted={(report) => {
           setToasts((prev) => [
             ...prev,
@@ -317,11 +521,15 @@ export default function App() {
   } else if (currentScreen === 'report-grouping') {
     content = (
       <ReportGroupingScreen
-        onBack={() => setCurrentScreen('department-demo')}
+        onBack={() => {
+          if (window.history.length > 1 && window.location.hash === '#report-grouping') {
+            window.history.back();
+          } else {
+            navigateTo('department-demo');
+          }
+        }}
         onViewIncident={(id) => {
-          setSelectedIncidentId(id);
-          setPreviousScreen('report-grouping');
-          setCurrentScreen('incident-detail');
+          navigateTo('incident-detail', { incidentId: id });
         }}
       />
     );
@@ -329,14 +537,12 @@ export default function App() {
     content = (
       <OutageHistoryScreen
         incidentsData={incidentsData}
-        onNavigateHome={() => setCurrentScreen('landing')}
+        onNavigateHome={() => navigateTo('landing', { section: 'home' })}
         onNavigateLiveOutages={handleNavigateLiveOutages}
-        onNavigateSignIn={() => setCurrentScreen('signin')}
-        onNavigateReportOutage={() => setCurrentScreen('report-outage')}
+        onNavigateSignIn={() => navigateTo('signin')}
+        onNavigateReportOutage={() => navigateTo('report-outage')}
         onViewIncidentDetail={(id) => {
-          setSelectedIncidentId(id);
-          setPreviousScreen('outage-history');
-          setCurrentScreen('incident-detail');
+          navigateTo('incident-detail', { incidentId: id });
         }}
       />
     );
@@ -344,10 +550,10 @@ export default function App() {
     content = (
       <div className="min-h-screen bg-background text-on-surface flex flex-col font-sans">
         <Header
-          onNavigateSignIn={() => setCurrentScreen('signin')}
-          onNavigateReportOutage={() => setCurrentScreen('report-outage')}
-          onNavigateOutageHistory={() => setCurrentScreen('outage-history')}
-          onNavigateHome={() => setCurrentScreen('landing')}
+          onNavigateSignIn={() => navigateTo('signin')}
+          onNavigateReportOutage={() => navigateTo('report-outage')}
+          onNavigateOutageHistory={() => navigateTo('outage-history')}
+          onNavigateHome={() => navigateTo('landing', { section: 'home' })}
           onNavigateLiveOutages={handleNavigateLiveOutages}
           currentScreen={currentScreen}
           session={session}
@@ -358,16 +564,19 @@ export default function App() {
           <Hero />
           <LiveOutages
             onSelectIncidentDetail={(id) => {
-              setSelectedIncidentId(id);
-              setPreviousScreen('landing');
-              setCurrentScreen('incident-detail');
+              navigateTo('incident-detail', { incidentId: id });
             }}
           />
           <HowItWorks />
           <CitizensAndTeams />
           <FinalCTA />
         </main>
-        <Footer onNavigateSignIn={() => setCurrentScreen('signin')} />
+        <Footer
+          onNavigateSignIn={() => navigateTo('signin')}
+          onNavigateOutageHistory={() => navigateTo('outage-history')}
+          onNavigateHome={() => navigateTo('landing', { section: 'home' })}
+          onNavigateLiveOutages={handleNavigateLiveOutages}
+        />
       </div>
     );
   }
