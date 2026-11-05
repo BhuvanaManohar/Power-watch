@@ -65,3 +65,41 @@ export const profileApi = {
     });
   },
 };
+
+/**
+ * Public Incidents API services calling FastAPI `/api/incidents` endpoints.
+ */
+export const incidentsApi = {
+  /**
+   * Fetch all active/logged incidents via GET /api/incidents
+   */
+  async getIncidents() {
+    return apiRequest('/api/incidents', { method: 'GET' });
+  },
+
+  /**
+   * Fetch a single incident by its UUID via GET /api/incidents/:id
+   */
+  async getIncidentById(id) {
+    return apiRequest(`/api/incidents/${id}`, { method: 'GET' });
+  },
+};
+
+/**
+ * Public Locations API services calling FastAPI `/api/locations` endpoints.
+ */
+export const locationsApi = {
+  /**
+   * Fetch all registered municipal locations via GET /api/locations
+   */
+  async getLocations() {
+    return apiRequest('/api/locations', { method: 'GET' });
+  },
+
+  /**
+   * Fetch a single location by its UUID via GET /api/locations/:id
+   */
+  async getLocationById(id) {
+    return apiRequest(`/api/locations/${id}`, { method: 'GET' });
+  },
+};

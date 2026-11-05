@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabaseClient';
-import { profileApi } from './lib/apiClient';
+import { profileApi, incidentsApi, locationsApi } from './lib/apiClient';
+import { adaptIncidentsList, adaptIncident } from './lib/incidentAdapter';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { LiveOutages } from './components/LiveOutages';
@@ -147,6 +148,123 @@ export default function App() {
     initialRoute.incidentId || 'west-district'
   );
   const [incidentsData, setIncidentsData] = useState(initialIncidentsData);
+  const [liveIncidents, setLiveIncidents] = useState([]);
+  const [liveIncidentsMap, setLiveIncidentsMap] = useState({});
+  const [locationsMap, setLocationsMap] = useState({});
+  const [isLoadingIncidents, setIsLoadingIncidents] = useState(true);
+  const [incidentsError, setIncidentsError] = useState(null);
+  const [individualLoadingId, setIndividualLoadingId] = useState(null);
+  const [individualError, setIndividualError] = useState(null);
+  const [individualRetryTrigger, setIndividualRetryTrigger] = useState(0);
+
+  const fetchLiveIncidentsAndLocations = (isRetry = false) => {
+    if (isRetry) {
+      setIsLoadingIncidents(true);
+      setIncidentsError(null);
+    }
+    return Promise.all([incidentsApi.getIncidents(), locationsApi.getLocations()])
+      .then(([incidentsRes, locationsRes]) => {
+        const { list, map } = adaptIncidentsList(incidentsRes || [], locationsRes || []);
+        setLiveIncidents(list);
+        setLiveIncidentsMap(map);
+
+        const locDict = {};
+        if (Array.isArray(locationsRes)) {
+          locationsRes.forEach((loc) => {
+            if (loc?.id) locDict[loc.id] = loc;
+          });
+        }
+        setLocationsMap(locDict);
+        setIncidentsError(null);
+      })
+      .catch((err) => {
+        console.warn('[PowerWatch] Error loading live incidents/locations from backend:', err);
+        setIncidentsError(err.message || 'Unable to connect to live incident service.');
+      })
+      .finally(() => {
+        setIsLoadingIncidents(false);
+      });
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.resolve().then(() => {
+      if (isMounted) {
+        fetchLiveIncidentsAndLocations();
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch individual incident by UUID if direct-linked outside the 50-record initial list
+  useEffect(() => {
+    if (currentScreen !== 'incident-detail' || !selectedIncidentId) return;
+    if (liveIncidentsMap[selectedIncidentId] || incidentsData[selectedIncidentId]) return;
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedIncidentId);
+    if (!isUuid) return;
+    if (isLoadingIncidents) return;
+
+    let isMounted = true;
+    Promise.resolve().then(async () => {
+      if (!isMounted) return;
+      setIndividualLoadingId(selectedIncidentId);
+      setIndividualError(null);
+      try {
+        const incidentRes = await incidentsApi.getIncidentById(selectedIncidentId);
+        if (!isMounted) return;
+
+        let locationRes = null;
+        if (incidentRes?.location_id) {
+          if (locationsMap[incidentRes.location_id]) {
+            locationRes = locationsMap[incidentRes.location_id];
+          } else {
+            try {
+              locationRes = await locationsApi.getLocationById(incidentRes.location_id);
+              if (locationRes && isMounted) {
+                setLocationsMap((prev) => ({ ...prev, [locationRes.id]: locationRes }));
+              }
+            } catch (locErr) {
+              console.warn('[PowerWatch] Could not resolve individual location:', locErr.message);
+            }
+          }
+        }
+
+        if (incidentRes && isMounted) {
+          const adapted = adaptIncident(incidentRes, locationRes);
+          if (adapted) {
+            setLiveIncidentsMap((prev) => ({
+              ...prev,
+              [adapted.id]: adapted,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn('[PowerWatch] Error fetching individual incident by ID:', err.message);
+        if (isMounted) {
+          setIndividualError(err.message || 'Incident record could not be found.');
+        }
+      } finally {
+        if (isMounted) {
+          setIndividualLoadingId(null);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    currentScreen,
+    selectedIncidentId,
+    liveIncidentsMap,
+    incidentsData,
+    isLoadingIncidents,
+    locationsMap,
+    individualRetryTrigger,
+  ]);
   const [crewsData, setCrewsData] = useState(initialCrewsData);
   const [notifications, setNotifications] = useState(initialNotificationsData);
   const [toasts, setToasts] = useState([]);
@@ -490,10 +608,31 @@ export default function App() {
       />
     );
   } else if (currentScreen === 'incident-detail') {
+    const allIncidentsForDetail = {
+      ...incidentsData,
+      ...liveIncidentsMap,
+    };
+    const isSingleLoading =
+      individualLoadingId === selectedIncidentId ||
+      (isLoadingIncidents && !allIncidentsForDetail[selectedIncidentId]);
+
     content = (
       <IncidentDetailScreen
         incidentId={selectedIncidentId}
-        incidentsData={incidentsData}
+        incidentsData={allIncidentsForDetail}
+        isLoading={isSingleLoading}
+        error={individualError || incidentsError}
+        onRetry={() => {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedIncidentId);
+          if (isUuid) {
+            setIndividualError(null);
+            setIncidentsError(null);
+            setIndividualLoadingId(selectedIncidentId);
+            setIndividualRetryTrigger((prev) => prev + 1);
+          } else {
+            fetchLiveIncidentsAndLocations(true);
+          }
+        }}
         onBack={handleBackFromIncident}
         onBackToOutageHistory={() => navigateTo('outage-history')}
         onBackToCitizenPortal={() => navigateTo('citizen-demo')}
@@ -536,7 +675,10 @@ export default function App() {
   } else if (currentScreen === 'outage-history') {
     content = (
       <OutageHistoryScreen
-        incidentsData={incidentsData}
+        incidentsData={liveIncidentsMap}
+        isLoading={isLoadingIncidents}
+        error={incidentsError}
+        onRetry={() => fetchLiveIncidentsAndLocations(true)}
         onNavigateHome={() => navigateTo('landing', { section: 'home' })}
         onNavigateLiveOutages={handleNavigateLiveOutages}
         onNavigateSignIn={() => navigateTo('signin')}
@@ -563,6 +705,10 @@ export default function App() {
         <main className="w-full pt-20 bg-background flex-1">
           <Hero />
           <LiveOutages
+            incidents={liveIncidents}
+            isLoading={isLoadingIncidents}
+            error={incidentsError}
+            onRetry={() => fetchLiveIncidentsAndLocations(true)}
             onSelectIncidentDetail={(id) => {
               navigateTo('incident-detail', { incidentId: id });
             }}

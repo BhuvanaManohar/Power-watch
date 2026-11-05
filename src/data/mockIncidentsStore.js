@@ -254,32 +254,103 @@ export const initialCrewsData = [
 ];
 
 export function computeOutageAnalytics(incidentsData = initialIncidentsData) {
-  const incidentsList = Object.values(incidentsData);
+  const incidentsList = Object.values(incidentsData || {});
   const total = incidentsList.length;
-  const resolved = incidentsList.filter(i => i.category === 'resolved');
-  const active = incidentsList.filter(i => i.category !== 'resolved');
+  const resolved = incidentsList.filter((i) => i.category === 'resolved');
+  const cancelled = incidentsList.filter((i) => i.category === 'cancelled');
+  // Exclude both resolved and cancelled from active count:
+  const active = incidentsList.filter((i) => i.category !== 'resolved' && i.category !== 'cancelled');
   
-  const totalReports = incidentsList.reduce((sum, i) => sum + (i.reportsCount || 0), 0);
+  // Community notices check
+  const incidentsWithReports = incidentsList.filter((i) => i.reportsCount != null);
+  const hasReportData = incidentsWithReports.length > 0;
+  const totalReports = hasReportData
+    ? incidentsWithReports.reduce((sum, i) => sum + (i.reportsCount || 0), 0)
+    : null;
   
-  const durationsMinutes = [75, 195, 105, 150];
-  const avgRestorationMins = Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length);
-  
+  // Derive average restoration duration from actual backend timestamps
+  const durationsMinutes = [];
+  resolved.forEach((inc) => {
+    const startStr = inc.raw?.created_at || inc.created_at;
+    const endStr = inc.raw?.actual_restoration || inc.actualRestoration || inc.actual_restoration;
+    if (startStr && endStr) {
+      const startMs = new Date(startStr).getTime();
+      const endMs = new Date(endStr).getTime();
+      if (!isNaN(startMs) && !isNaN(endMs) && endMs > startMs) {
+        durationsMinutes.push(Math.round((endMs - startMs) / (1000 * 60)));
+      }
+    }
+  });
+
+  const hasRestorationData = durationsMinutes.length > 0;
+  const avgRestorationMins = hasRestorationData
+    ? Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length)
+    : null;
+  const avgRestorationHoursStr = hasRestorationData
+    ? (avgRestorationMins >= 60
+        ? `${Math.floor(avgRestorationMins / 60)}h ${avgRestorationMins % 60}m`
+        : `${avgRestorationMins}m`)
+    : 'Unavailable';
+
+  // Derive Most Affected Area from backend sector / location impact
+  let mostAffectedArea = 'Unavailable';
+  let mostAffectedAreaImpact = null;
+  let mostAffectedAreaIncidentCount = 0;
+
+  if (incidentsList.length > 0) {
+    const areaStats = {};
+    incidentsList.forEach((inc) => {
+      const area = inc.areaName || inc.location?.name || inc.raw?.location?.name || (inc.raw?.title ? inc.title : null);
+      if (area && area !== 'Municipal Grid Sector') {
+        if (!areaStats[area]) {
+          areaStats[area] = { name: area, households: 0, incidents: 0, hasHouseholds: false };
+        }
+        areaStats[area].incidents += 1;
+        const hh = inc.affectedHouseholdsCount ?? inc.raw?.affected_households;
+        if (hh != null && !isNaN(hh)) {
+          areaStats[area].households += Number(hh);
+          areaStats[area].hasHouseholds = true;
+        }
+      }
+    });
+
+    const entries = Object.values(areaStats);
+    if (entries.length > 0) {
+      const hasAnyHouseholdData = entries.some((e) => e.hasHouseholds && e.households > 0);
+      entries.sort((a, b) => {
+        if (hasAnyHouseholdData) {
+          return b.households - a.households || b.incidents - a.incidents;
+        }
+        return b.incidents - a.incidents;
+      });
+
+      mostAffectedArea = entries[0].name;
+      mostAffectedAreaImpact = entries[0].hasHouseholds ? entries[0].households : null;
+      mostAffectedAreaIncidentCount = entries[0].incidents;
+    }
+  }
+
   const severityCounts = {
-    Critical: incidentsList.filter(i => i.severityLevel === 'Critical' || i.severity.includes('Critical')).length,
-    High: incidentsList.filter(i => i.severityLevel === 'High' || i.severity.includes('High')).length,
-    Medium: incidentsList.filter(i => i.severityLevel === 'Medium' || i.severity.includes('Medium')).length,
-    Low: incidentsList.filter(i => i.severityLevel === 'Low' || i.severity.includes('Low')).length,
+    Critical: incidentsList.filter((i) => i.severityLevel === 'Critical' || (i.severity && i.severity.includes('Critical'))).length,
+    High: incidentsList.filter((i) => i.severityLevel === 'High' || (i.severity && i.severity.includes('High'))).length,
+    Medium: incidentsList.filter((i) => i.severityLevel === 'Medium' || (i.severity && i.severity.includes('Medium'))).length,
+    Low: incidentsList.filter((i) => i.severityLevel === 'Low' || (i.severity && i.severity.includes('Low'))).length,
   };
 
   return {
     totalIncidents: total,
     resolvedCount: resolved.length,
+    cancelledCount: cancelled.length,
     activeCount: active.length,
+    hasReportData,
     totalReportsCount: totalReports,
+    hasRestorationData,
     avgRestorationMins,
-    avgRestorationHoursStr: `${Math.floor(avgRestorationMins / 60)}h ${avgRestorationMins % 60}m`,
+    avgRestorationHoursStr,
+    mostAffectedArea,
+    mostAffectedAreaImpact,
+    mostAffectedAreaIncidentCount,
     severityCounts,
-    mostAffectedArea: 'South Industrial Grid (Substation 4)',
   };
 }
 

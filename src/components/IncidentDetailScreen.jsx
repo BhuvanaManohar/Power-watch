@@ -1,7 +1,10 @@
 import React from 'react';
+import { LoadingState } from './LoadingState';
+import { ErrorState } from './ErrorState';
 
 const mockIncidentDetailsData = {
   'west-district': {
+    id: 'west-district',
     incidentId: 'INC-8921-W',
     areaName: 'Oak & 8th Avenue Corridor (West District)',
     statusText: 'Under Investigation',
@@ -14,6 +17,7 @@ const mockIncidentDetailsData = {
     lastUpdatedTime: 'Today at 1:45 PM (15 mins ago)',
     estimatedRestoration: 'Est. 2:30 PM Today',
     affectedHouseholds: '120–150 Households',
+    isDemo: true,
     timeline: [
       { stage: 'Reported', timestamp: '1:15 PM', status: 'completed' },
       { stage: 'Under Investigation', timestamp: '1:30 PM', status: 'current' },
@@ -44,6 +48,7 @@ const mockIncidentDetailsData = {
     ]
   },
   'north-crestview': {
+    id: 'north-crestview',
     incidentId: 'INC-7430-N',
     areaName: 'North Crestview Neighborhood',
     statusText: 'Restoration in Progress',
@@ -56,6 +61,7 @@ const mockIncidentDetailsData = {
     lastUpdatedTime: 'Today at 1:55 PM (5 mins ago)',
     estimatedRestoration: 'Est. 1:45 PM Today',
     affectedHouseholds: '30–40 Households',
+    isDemo: true,
     timeline: [
       { stage: 'Reported', timestamp: '1:40 PM', status: 'completed' },
       { stage: 'Under Investigation', timestamp: '1:45 PM', status: 'completed' },
@@ -85,6 +91,7 @@ const mockIncidentDetailsData = {
     ]
   },
   'riverfront': {
+    id: 'riverfront',
     incidentId: 'INC-3105-R',
     areaName: 'Riverfront Commercial & Marina Area',
     statusText: 'Power Restored',
@@ -97,6 +104,7 @@ const mockIncidentDetailsData = {
     lastUpdatedTime: 'Today at 2:15 PM',
     estimatedRestoration: 'Restored at 2:15 PM',
     affectedHouseholds: 'Commercial Circuit (22 businesses)',
+    isDemo: true,
     timeline: [
       { stage: 'Reported', timestamp: '1:00 PM', status: 'completed' },
       { stage: 'Under Investigation', timestamp: '1:10 PM', status: 'completed' },
@@ -130,16 +138,31 @@ const mockIncidentDetailsData = {
 export function IncidentDetailScreen({
   incidentId = 'west-district',
   incidentsData,
+  isLoading = false,
+  error = null,
+  onRetry,
   onBack,
   onBackToDepartmentPortal,
   onBackToCitizenPortal,
   onBackToOutageHistory,
 }) {
-  const dataset = incidentsData || mockIncidentDetailsData;
-  const targetKey = Object.keys(dataset).find(
-    (key) => key === incidentId || dataset[key].incidentId === incidentId
-  );
-  const incident = dataset[targetKey || incidentId] || dataset['west-district'] || mockIncidentDetailsData['west-district'];
+  const dataset = incidentsData || {};
+
+  // Find target incident from provided dataset or demo data
+  let incident = null;
+  if (dataset[incidentId]) {
+    incident = dataset[incidentId];
+  } else {
+    const found = Object.values(dataset).find(
+      (item) => item.id === incidentId || item.incidentId === incidentId || item.backendId === incidentId
+    );
+    if (found) {
+      incident = found;
+    } else if (mockIncidentDetailsData[incidentId]) {
+      // Demo dataset lookup for demo-mode routes
+      incident = mockIncidentDetailsData[incidentId];
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-sans">
@@ -190,213 +213,287 @@ export function IncidentDetailScreen({
             )}
           </div>
 
-          <span className="font-mono text-xs font-bold text-on-surface-variant bg-surface-container-high px-space-xs py-0.5 rounded">
-            {incident.incidentId}
-          </span>
+          {incident && (
+            <div className="flex items-center gap-space-xs">
+              {incident.isLive ? (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-container text-on-primary-container border border-primary/20">
+                  Live Grid Incident
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-secondary-container/70 text-on-secondary-container border border-secondary-container">
+                  Demo Data
+                </span>
+              )}
+              <span className="font-mono text-xs font-bold text-on-surface-variant bg-surface-container-high px-space-xs py-0.5 rounded">
+                {incident.incidentId}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Content Body */}
       <main className="flex-1 w-full max-w-[1440px] mx-auto px-margin md:px-margin-desktop pt-28 pb-space-2xl flex flex-col gap-space-xl">
-        
-        {/* Incident Header Card */}
-        <div className="p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-md">
-          <div className="flex flex-wrap items-start justify-between gap-space-sm">
-            <div>
-              <div className="flex items-center gap-space-xs mb-space-xxs flex-wrap">
-                <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary-container/30">
-                  {incident.incidentId}
-                </span>
-                <span className={`px-space-xs py-0.5 rounded-full text-xs font-bold flex items-center gap-1 ${incident.statusClass}`}>
-                  <span className="material-symbols-outlined text-[14px]">{incident.statusIcon}</span>
-                  {incident.statusText}
-                </span>
-                <span className={`px-space-xs py-0.5 rounded-full text-xs font-bold ${incident.severityClass}`}>
-                  {incident.severity}
-                </span>
-              </div>
-              <h1 className="text-xl md:text-2xl font-bold text-on-surface tracking-tight leading-snug">
-                {incident.areaName}
-              </h1>
-            </div>
-
-            <button
-              type="button"
-              onClick={onBack}
-              className="px-space-md py-space-xs rounded-lg border border-outline-variant/60 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer self-start"
-            >
-              Close Details
-            </button>
+        {isLoading && !incident ? (
+          <div className="py-space-2xl">
+            <LoadingState message="Connecting to municipal grid incident record..." />
           </div>
-
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter pt-space-xs border-t border-outline-variant/40 text-xs">
-            <div>
-              <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Community Notices</span>
-              <span className="font-bold text-primary text-sm">{incident.reportsCount} Verified Reports</span>
-            </div>
-            <div>
-              <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Reported Time</span>
-              <span className="font-bold text-on-surface text-sm">{incident.reportedTime}</span>
-            </div>
-            <div>
-              <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Last Status Update</span>
-              <span className="font-bold text-on-surface text-sm">{incident.lastUpdatedTime}</span>
-            </div>
-            <div>
-              <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Estimated Restoration</span>
-              <span className="font-bold text-on-surface text-sm">{incident.estimatedRestoration}</span>
-            </div>
+        ) : !incident ? (
+          <div className="py-space-2xl">
+            <ErrorState
+              title={
+                error && !error.toLowerCase().includes('not found') && !error.includes('404')
+                  ? 'Unable to load incident details'
+                  : 'Incident Record Not Found'
+              }
+              message={
+                error ||
+                `The outage incident "${incidentId}" could not be found or has been archived.`
+              }
+              onRetry={onRetry || onBack}
+            />
           </div>
-        </div>
-
-        {/* 2-Column Main Section: Timeline + Operational Details */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter-lg items-start">
-          
-          {/* Left Column: Lifecycle Timeline */}
-          <div className="lg:col-span-6 p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-md">
-            <div className="flex items-center justify-between border-b border-outline-variant/30 pb-space-xs">
-              <h3 className="text-base font-bold text-on-surface flex items-center gap-space-xs">
-                <span className="material-symbols-outlined text-primary text-[20px]">timeline</span>
-                <span>Incident Lifecycle Timeline</span>
-              </h3>
-              <span className="text-xs text-on-surface-variant font-medium">Stage Progress</span>
-            </div>
-
-            <div className="flex flex-col gap-space-md relative pl-space-sm">
-              {incident.timeline.map((step, idx) => {
-                const isCompleted = step.status === 'completed';
-                const isCurrent = step.status === 'current';
-
-                const dotStyle = isCompleted
-                  ? 'bg-secondary text-on-secondary ring-2 ring-secondary/30'
-                  : isCurrent
-                  ? 'bg-primary text-on-primary ring-4 ring-primary/20 animate-pulse'
-                  : 'bg-surface-container-high border border-outline-variant text-outline';
-
-                return (
-                  <div key={step.stage} className="flex items-start gap-space-md relative">
-                    {/* Connecting line */}
-                    {idx < incident.timeline.length - 1 && (
-                      <div
-                        className={`absolute left-[11px] top-[24px] w-0.5 h-[calc(100%+8px)] ${
-                          isCompleted ? 'bg-secondary' : 'bg-outline-variant/40'
-                        }`}
-                      />
-                    )}
-
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold z-10 shrink-0 ${dotStyle}`}>
-                      {isCompleted ? (
-                        <span className="material-symbols-outlined text-[14px]">check</span>
-                      ) : (
-                        idx + 1
-                      )}
-                    </div>
-
-                    <div className="flex-1 flex items-center justify-between gap-space-sm pb-space-xs">
-                      <div>
-                        <p className={`text-xs font-bold ${isCurrent ? 'text-primary' : isCompleted ? 'text-on-surface' : 'text-on-surface-variant/70'}`}>
-                          {step.stage}
-                        </p>
-                        {isCurrent && (
-                          <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-container text-on-primary-container">
-                            Current Active Phase
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] font-mono font-semibold text-on-surface-variant shrink-0">
-                        {step.timestamp}
+        ) : (
+          <>
+            {/* Incident Header Card */}
+            <div className="p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-md">
+              <div className="flex flex-wrap items-start justify-between gap-space-sm">
+                <div>
+                  <div className="flex items-center gap-space-xs mb-space-xxs flex-wrap">
+                    <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary-container/30">
+                      {incident.incidentId}
+                    </span>
+                    <span className={`px-space-xs py-0.5 rounded-full text-xs font-bold flex items-center gap-1 ${incident.statusClass}`}>
+                      <span className="material-symbols-outlined text-[14px]">{incident.statusIcon}</span>
+                      {incident.statusText}
+                    </span>
+                    <span className={`px-space-xs py-0.5 rounded-full text-xs font-bold ${incident.severityClass}`}>
+                      {incident.severity}
+                    </span>
+                    {!incident.isLive && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-secondary-container/70 text-on-secondary-container border border-secondary-container">
+                        Simulated Demo Outage
                       </span>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  <h1 className="text-xl md:text-2xl font-bold text-on-surface tracking-tight leading-snug">
+                    {incident.areaName}
+                  </h1>
+                  {incident.outageType && (
+                    <p className="text-xs text-on-surface-variant pt-1 font-medium">
+                      Category: <span className="font-bold text-on-surface">{incident.outageType}</span>
+                    </p>
+                  )}
+                </div>
 
-          {/* Right Column: Latest Operational Updates & Community Reports */}
-          <div className="lg:col-span-6 flex flex-col gap-space-lg">
-            
-            {/* Latest Department Update & Citizen Notifications */}
-            <div className="p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-sm">
-              <div className="flex items-center justify-between border-b border-outline-variant/30 pb-space-xs">
-                <h3 className="text-base font-bold text-on-surface flex items-center gap-space-xs">
-                  <span className="material-symbols-outlined text-primary text-[20px]">notifications_active</span>
-                  <span>Official Department Updates & Incident Alerts</span>
-                </h3>
-                <span className="text-xs text-primary font-bold">{incident.departmentUpdates?.length || 0} Published</span>
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="px-space-md py-space-xs rounded-lg border border-outline-variant/60 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer self-start"
+                >
+                  Close Details
+                </button>
               </div>
 
-              <div className="flex flex-col gap-space-sm pt-space-xs">
-                {(!incident.departmentUpdates || incident.departmentUpdates.length === 0) ? (
-                  <p className="text-xs text-on-surface-variant p-space-sm rounded-xl bg-surface-container-low border border-dashed border-outline-variant/40 text-center">
-                    No official department updates published for this incident yet.
+              {/* Quick Metrics Bar */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter pt-space-xs border-t border-outline-variant/40 text-xs">
+                <div>
+                  <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Community Notices</span>
+                  <span className="font-bold text-primary text-sm">
+                    {incident.reportsCount != null ? `${incident.reportsCount} Verified Reports` : 'Verified Grid Record'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Reported Time</span>
+                  <span className="font-bold text-on-surface text-sm">{incident.reportedTime || incident.time}</span>
+                </div>
+                <div>
+                  <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Last Status Update</span>
+                  <span className="font-bold text-on-surface text-sm">{incident.lastUpdatedTime || 'Recently'}</span>
+                </div>
+                <div>
+                  <span className="text-on-surface-variant block uppercase font-bold text-[10px]">Estimated Restoration</span>
+                  <span className="font-bold text-on-surface text-sm">{incident.estimatedRestoration}</span>
+                </div>
+              </div>
+
+              {/* Additional operational details if available */}
+              {(incident.affectedHouseholds || incident.assignedCrew) && (
+                <div className="flex flex-wrap items-center gap-space-md pt-space-xs border-t border-outline-variant/30 text-xs text-on-surface-variant">
+                  {incident.affectedHouseholds && (
+                    <div className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-primary">groups</span>
+                      <span>Impact: <strong className="text-on-surface">{incident.affectedHouseholds}</strong></span>
+                    </div>
+                  )}
+                  {incident.assignedCrew && incident.assignedCrew !== 'Unassigned' && (
+                    <div className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-secondary">engineering</span>
+                      <span>Dispatched Crew: <strong className="text-on-surface">{incident.assignedCrew}</strong></span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2-Column Main Section: Timeline + Operational Details */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter-lg items-start">
+              {/* Left Column: Lifecycle Timeline */}
+              <div className="lg:col-span-6 p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-md">
+                <div className="flex items-center justify-between border-b border-outline-variant/30 pb-space-xs">
+                  <h3 className="text-base font-bold text-on-surface flex items-center gap-space-xs">
+                    <span className="material-symbols-outlined text-primary text-[20px]">timeline</span>
+                    <span>Incident Lifecycle Timeline</span>
+                  </h3>
+                  <span className="text-xs text-on-surface-variant font-medium">Stage Progress</span>
+                </div>
+
+                {(!incident.timeline || incident.timeline.length === 0) ? (
+                  <p className="text-xs text-on-surface-variant py-space-md text-center">
+                    Lifecycle timeline pending status updates.
                   </p>
                 ) : (
-                  incident.departmentUpdates.map((update, i) => {
-                    const category = update.category || (update.title.includes('Crew') ? 'Crew Update' : update.title.includes('Restoration') || update.title.includes('ETR') ? 'ETR Update' : update.title.includes('Resolved') || update.title.includes('Restored') ? 'Resolution Update' : 'Status Update');
-                    return (
-                      <div key={i} className="p-space-sm rounded-xl bg-surface-container-low border border-outline-variant/40 flex flex-col gap-space-xxs text-xs">
-                        <div className="flex items-center justify-between flex-wrap gap-space-xxs">
-                          <div className="flex items-center gap-space-xs">
-                            <span className="font-bold text-on-surface">{update.title}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-container/40 text-on-primary-container border border-primary-container/60">
-                              {category}
+                  <div className="flex flex-col gap-space-md relative pl-space-sm">
+                    {incident.timeline.map((step, idx) => {
+                      const isCompleted = step.status === 'completed';
+                      const isCurrent = step.status === 'current';
+
+                      const dotStyle = isCompleted
+                        ? 'bg-secondary text-on-secondary ring-2 ring-secondary/30'
+                        : isCurrent
+                        ? 'bg-primary text-on-primary ring-4 ring-primary/20 animate-pulse'
+                        : 'bg-surface-container-high border border-outline-variant text-outline';
+
+                      return (
+                        <div key={step.stage} className="flex items-start gap-space-md relative">
+                          {/* Connecting line */}
+                          {idx < incident.timeline.length - 1 && (
+                            <div
+                              className={`absolute left-[11px] top-[24px] w-0.5 h-[calc(100%+8px)] ${
+                                isCompleted ? 'bg-secondary' : 'bg-outline-variant/40'
+                              }`}
+                            />
+                          )}
+
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold z-10 shrink-0 ${dotStyle}`}>
+                            {isCompleted ? (
+                              <span className="material-symbols-outlined text-[14px]">check</span>
+                            ) : (
+                              idx + 1
+                            )}
+                          </div>
+
+                          <div className="flex-1 flex items-center justify-between gap-space-sm pb-space-xs">
+                            <div>
+                              <p className={`text-xs font-bold ${isCurrent ? 'text-primary' : isCompleted ? 'text-on-surface' : 'text-on-surface-variant/70'}`}>
+                                {step.stage}
+                              </p>
+                              {isCurrent && (
+                                <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-container text-on-primary-container">
+                                  Current Active Phase
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-mono font-semibold text-on-surface-variant shrink-0">
+                              {step.timestamp}
                             </span>
                           </div>
-                          <span className="font-mono text-[11px] text-on-surface-variant">{update.time}</span>
                         </div>
-                        <p className="text-on-surface-variant leading-relaxed pt-0.5">{update.description}</p>
-                        <span className="text-[10px] font-semibold text-primary pt-1">
-                          Logged by: {update.officer}
-                        </span>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Related Community Reports */}
-            <div className="p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-sm">
-              <div className="flex items-center justify-between border-b border-outline-variant/30 pb-space-xs">
-                <h3 className="text-base font-bold text-on-surface flex items-center gap-space-xs">
-                  <span className="material-symbols-outlined text-primary text-[20px]">assignment</span>
-                  <span>Related Community Reports</span>
-                </h3>
-                <span className="text-xs text-primary font-bold">{incident.communityReports.length} Notices</span>
+              {/* Right Column: Latest Operational Updates & Community Reports */}
+              <div className="lg:col-span-6 flex flex-col gap-space-lg">
+                {/* Latest Department Update & Citizen Notifications */}
+                <div className="p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-sm">
+                  <div className="flex items-center justify-between border-b border-outline-variant/30 pb-space-xs">
+                    <h3 className="text-base font-bold text-on-surface flex items-center gap-space-xs">
+                      <span className="material-symbols-outlined text-primary text-[20px]">notifications_active</span>
+                      <span>Official Department Updates & Incident Alerts</span>
+                    </h3>
+                    <span className="text-xs text-primary font-bold">{incident.departmentUpdates?.length || 0} Published</span>
+                  </div>
+
+                  <div className="flex flex-col gap-space-sm pt-space-xs">
+                    {(!incident.departmentUpdates || incident.departmentUpdates.length === 0) ? (
+                      <p className="text-xs text-on-surface-variant p-space-sm rounded-xl bg-surface-container-low border border-dashed border-outline-variant/40 text-center">
+                        No official department updates published for this incident yet.
+                      </p>
+                    ) : (
+                      incident.departmentUpdates.map((update, i) => {
+                        const category = update.category || (update.title.includes('Crew') ? 'Crew Update' : update.title.includes('Restoration') || update.title.includes('ETR') ? 'ETR Update' : update.title.includes('Resolved') || update.title.includes('Restored') ? 'Resolution Update' : 'Status Update');
+                        return (
+                          <div key={i} className="p-space-sm rounded-xl bg-surface-container-low border border-outline-variant/40 flex flex-col gap-space-xxs text-xs">
+                            <div className="flex items-center justify-between flex-wrap gap-space-xxs">
+                              <div className="flex items-center gap-space-xs">
+                                <span className="font-bold text-on-surface">{update.title}</span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-container/40 text-on-primary-container border border-primary-container/60">
+                                  {category}
+                                </span>
+                              </div>
+                              <span className="font-mono text-[11px] text-on-surface-variant">{update.time}</span>
+                            </div>
+                            <p className="text-on-surface-variant leading-relaxed pt-0.5">{update.description}</p>
+                            <span className="text-[10px] font-semibold text-primary pt-1">
+                              Logged by: {update.officer}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Related Community Reports */}
+                <div className="p-space-lg rounded-2xl bg-surface-container-lowest border border-outline-variant/60 shadow-sm flex flex-col gap-space-sm">
+                  <div className="flex items-center justify-between border-b border-outline-variant/30 pb-space-xs">
+                    <h3 className="text-base font-bold text-on-surface flex items-center gap-space-xs">
+                      <span className="material-symbols-outlined text-primary text-[20px]">assignment</span>
+                      <span>Related Community Reports</span>
+                    </h3>
+                    <span className="text-xs text-primary font-bold">{incident.communityReports?.length || 0} Notices</span>
+                  </div>
+
+                  {(!incident.communityReports || incident.communityReports.length === 0) ? (
+                    <p className="text-xs text-on-surface-variant p-space-sm rounded-xl bg-surface-container-low border border-dashed border-outline-variant/40 text-center">
+                      No citizen reports currently linked to this incident.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-outline-variant/40 text-on-surface-variant font-bold text-[10px] uppercase">
+                            <th className="py-2 px-2">Report Ref</th>
+                            <th className="py-2 px-2">Reported</th>
+                            <th className="py-2 px-2">Sub-Area</th>
+                            <th className="py-2 px-2 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {incident.communityReports.map((rep) => (
+                            <tr key={rep.ref} className="border-b border-outline-variant/20 hover:bg-surface-container-low/50">
+                              <td className="py-2 px-2 font-mono font-bold text-primary">{rep.ref}</td>
+                              <td className="py-2 px-2 text-on-surface-variant">{rep.time}</td>
+                              <td className="py-2 px-2 font-semibold text-on-surface">{rep.location}</td>
+                              <td className="py-2 px-2 text-right">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary-container text-on-secondary-container">
+                                  {rep.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-outline-variant/40 text-on-surface-variant font-bold text-[10px] uppercase">
-                      <th className="py-2 px-2">Report Ref</th>
-                      <th className="py-2 px-2">Reported</th>
-                      <th className="py-2 px-2">Sub-Area</th>
-                      <th className="py-2 px-2 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {incident.communityReports.map((rep) => (
-                      <tr key={rep.ref} className="border-b border-outline-variant/20 hover:bg-surface-container-low/50">
-                        <td className="py-2 px-2 font-mono font-bold text-primary">{rep.ref}</td>
-                        <td className="py-2 px-2 text-on-surface-variant">{rep.time}</td>
-                        <td className="py-2 px-2 font-semibold text-on-surface">{rep.location}</td>
-                        <td className="py-2 px-2 text-right">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary-container text-on-secondary-container">
-                            {rep.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
-
-          </div>
-        </div>
+          </>
+        )}
       </main>
     </div>
   );

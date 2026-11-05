@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { LoadingState } from './LoadingState';
+import { ErrorState } from './ErrorState';
 import { computeOutageAnalytics } from '../data/mockIncidentsStore';
 
 export function OutageHistoryScreen({
   incidentsData = {},
+  isLoading = false,
+  error = null,
+  onRetry,
   onNavigateHome,
   onNavigateLiveOutages,
   onNavigateSignIn,
@@ -41,7 +46,8 @@ export function OutageHistoryScreen({
     // Status filter
     if (selectedStatus !== 'all') {
       if (selectedStatus === 'resolved' && inc.category !== 'resolved') return false;
-      if (selectedStatus === 'active' && inc.category === 'resolved') return false;
+      if (selectedStatus === 'active' && (inc.category === 'resolved' || inc.category === 'cancelled')) return false;
+      if (selectedStatus === 'cancelled' && inc.category !== 'cancelled') return false;
     }
 
     return true;
@@ -95,7 +101,7 @@ export function OutageHistoryScreen({
               <span className="text-xs font-semibold text-secondary">({analytics.resolvedCount} Resolved)</span>
             </div>
             <p className="text-xs text-on-surface-variant">
-              Across all 6 municipal power sectors logged in system.
+              {analytics.activeCount} active, {analytics.resolvedCount} resolved{analytics.cancelledCount > 0 ? `, ${analytics.cancelledCount} cancelled` : ''}.
             </p>
           </div>
 
@@ -107,10 +113,14 @@ export function OutageHistoryScreen({
             </div>
             <div className="flex items-baseline gap-space-xs">
               <span className="text-3xl font-extrabold text-on-surface">{analytics.avgRestorationHoursStr}</span>
-              <span className="text-xs font-semibold text-tertiary">({analytics.avgRestorationMins} mins avg)</span>
+              {analytics.avgRestorationMins != null && (
+                <span className="text-xs font-semibold text-tertiary">({analytics.avgRestorationMins} mins avg)</span>
+              )}
             </div>
             <p className="text-xs text-on-surface-variant">
-              Calculated from verified power restoration timestamps.
+              {analytics.hasRestorationData
+                ? 'Calculated from verified power restoration timestamps.'
+                : 'Insufficient timestamp data to calculate restoration average.'}
             </p>
           </div>
 
@@ -121,11 +131,22 @@ export function OutageHistoryScreen({
               <span className="material-symbols-outlined text-tertiary text-[20px]">mark_email_unread</span>
             </div>
             <div className="flex items-baseline gap-space-xs">
-              <span className="text-3xl font-extrabold text-on-surface">{analytics.totalReportsCount}</span>
-              <span className="text-xs font-semibold text-on-surface-variant">verified reports</span>
+              {analytics.hasReportData ? (
+                <>
+                  <span className="text-3xl font-extrabold text-on-surface">{analytics.totalReportsCount}</span>
+                  <span className="text-xs font-semibold text-on-surface-variant">verified reports</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl font-bold text-on-surface">Not yet linked</span>
+                  <span className="text-xs font-semibold text-on-surface-variant">(Unavailable)</span>
+                </>
+              )}
             </div>
             <p className="text-xs text-on-surface-variant">
-              Linked to historical & active incident dispatches.
+              {analytics.hasReportData
+                ? 'Linked to historical & active incident dispatches.'
+                : 'Citizen community report data is not yet linked to backend incidents.'}
             </p>
           </div>
 
@@ -137,10 +158,24 @@ export function OutageHistoryScreen({
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-on-surface truncate">{analytics.mostAffectedArea}</span>
-              <span className="text-xs font-semibold text-error">22 Community Reports</span>
+              {analytics.mostAffectedArea !== 'Unavailable' ? (
+                analytics.mostAffectedAreaImpact != null && analytics.mostAffectedAreaImpact > 0 ? (
+                  <span className="text-xs font-semibold text-error">
+                    {analytics.mostAffectedAreaImpact.toLocaleString()} households affected
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold text-error">
+                    {analytics.mostAffectedAreaIncidentCount} incident{analytics.mostAffectedAreaIncidentCount === 1 ? '' : 's'} recorded
+                  </span>
+                )
+              ) : (
+                <span className="text-xs font-semibold text-on-surface-variant">Insufficient data</span>
+              )}
             </div>
             <p className="text-xs text-on-surface-variant">
-              Substation 4 primary transformer weather trip.
+              {analytics.mostAffectedArea !== 'Unavailable'
+                ? 'Sector with highest cumulative grid impact recorded.'
+                : 'No sector impact records available to evaluate.'}
             </p>
           </div>
         </div>
@@ -168,7 +203,7 @@ export function OutageHistoryScreen({
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden mt-1">
                 <div
                   className="bg-error h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(analytics.severityCounts.Critical / analytics.totalIncidents) * 100}%` }}
+                  style={{ width: `${analytics.totalIncidents > 0 ? (analytics.severityCounts.Critical / analytics.totalIncidents) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -184,7 +219,7 @@ export function OutageHistoryScreen({
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden mt-1">
                 <div
                   className="bg-tertiary h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(analytics.severityCounts.High / analytics.totalIncidents) * 100}%` }}
+                  style={{ width: `${analytics.totalIncidents > 0 ? (analytics.severityCounts.High / analytics.totalIncidents) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -200,7 +235,7 @@ export function OutageHistoryScreen({
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden mt-1">
                 <div
                   className="bg-primary h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(analytics.severityCounts.Medium / analytics.totalIncidents) * 100}%` }}
+                  style={{ width: `${analytics.totalIncidents > 0 ? (analytics.severityCounts.Medium / analytics.totalIncidents) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -216,7 +251,7 @@ export function OutageHistoryScreen({
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden mt-1">
                 <div
                   className="bg-secondary h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(analytics.severityCounts.Low / analytics.totalIncidents) * 100}%` }}
+                  style={{ width: `${analytics.totalIncidents > 0 ? (analytics.severityCounts.Low / analytics.totalIncidents) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -281,6 +316,7 @@ export function OutageHistoryScreen({
               <option value="all">All Statuses (Active & Resolved)</option>
               <option value="resolved">Power Restored (Resolved)</option>
               <option value="active">Active Outages</option>
+              <option value="cancelled">Cancelled</option>
             </select>
           </div>
 
@@ -302,7 +338,15 @@ export function OutageHistoryScreen({
             <span className="text-xs font-semibold text-on-surface-variant">Showing {filteredIncidents.length} of {incidentsList.length} incidents</span>
           </div>
 
-          {filteredIncidents.length === 0 ? (
+          {isLoading ? (
+            <div className="py-space-xl">
+              <LoadingState message="Loading historical outage records..." />
+            </div>
+          ) : error ? (
+            <div className="py-space-xl">
+              <ErrorState title="Unable to load outage records" message={error} onRetry={onRetry} />
+            </div>
+          ) : filteredIncidents.length === 0 ? (
             <div className="py-space-2xl text-center flex flex-col items-center justify-center gap-space-xs">
               <span className="material-symbols-outlined text-outline text-[40px]">find_in_page</span>
               <p className="text-sm font-bold text-on-surface">No incident records matching current filter criteria.</p>
@@ -346,7 +390,13 @@ export function OutageHistoryScreen({
                       </td>
                       <td className="py-3.5 px-3 text-on-surface-variant font-medium">{inc.reportedTime || inc.time}</td>
                       <td className="py-3.5 px-3 text-on-surface font-medium">{inc.estimatedRestoration}</td>
-                      <td className="py-3.5 px-3 text-center font-bold text-on-surface-variant">{inc.reportsCount}</td>
+                      <td className="py-3.5 px-3 text-center font-bold text-on-surface-variant">
+                        {inc.reportsCount != null ? (
+                          inc.reportsCount
+                        ) : (
+                          <span className="text-on-surface-variant/70 font-normal text-[11px]">Not yet linked</span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-3 text-right">
                         <button
                           type="button"
